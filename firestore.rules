@@ -1,0 +1,327 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // =========================================================================
+    // 0. GLOBAL SAFETY NET (Default-Deny Catch-All)
+    // =========================================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // 1. HARDENED PRIMITIVE HELPERS
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isAdmin() {
+      return isVerified() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'diyanto13@gmail.com'
+      );
+    }
+
+    function isKasir() {
+      return isVerified() && (
+        isAdmin() ||
+        (
+          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kasir'
+        )
+      );
+    }
+
+    // =========================================================================
+    // 2. ENTITY VALIDATION BLUEPRINTS (Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'name', 'email', 'role', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'name', 'email', 'role', 'createdAt', 'updatedAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid == request.auth.uid &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.role is string && data.role in ['kasir', 'kepsek'] &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidAdminPrivilege(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.uid == request.auth.uid &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidSchoolSettings(data) {
+      return data.keys().hasAll([
+          'schoolName', 'schoolSubtitle', 'schoolAddress', 'schoolContact', 'schoolCity',
+          'logoDataUrl', 'cashierName', 'cashierNip', 'cashierEmail', 'cashierPasswordHint',
+          'principalName', 'principalNip', 'principalEmail', 'principalPasswordHint',
+          'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'schoolName', 'schoolSubtitle', 'schoolAddress', 'schoolContact', 'schoolCity',
+          'logoDataUrl', 'cashierName', 'cashierNip', 'cashierEmail', 'cashierPasswordHint',
+          'principalName', 'principalNip', 'principalEmail', 'principalPasswordHint',
+          'updatedBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120 &&
+        data.schoolSubtitle is string && data.schoolSubtitle.size() >= 0 && data.schoolSubtitle.size() <= 150 &&
+        data.schoolAddress is string && data.schoolAddress.size() >= 2 && data.schoolAddress.size() <= 250 &&
+        data.schoolContact is string && data.schoolContact.size() >= 0 && data.schoolContact.size() <= 180 &&
+        data.schoolCity is string && data.schoolCity.size() >= 2 && data.schoolCity.size() <= 60 &&
+        data.logoDataUrl is string && data.logoDataUrl.size() >= 0 && data.logoDataUrl.size() <= 150000 &&
+        data.cashierName is string && data.cashierName.size() >= 2 && data.cashierName.size() <= 100 &&
+        data.cashierNip is string && data.cashierNip.size() >= 0 && data.cashierNip.size() <= 50 &&
+        data.cashierEmail is string && data.cashierEmail.size() >= 3 && data.cashierEmail.size() <= 120 &&
+        data.cashierPasswordHint is string && data.cashierPasswordHint.size() >= 0 && data.cashierPasswordHint.size() <= 60 &&
+        data.principalName is string && data.principalName.size() >= 2 && data.principalName.size() <= 100 &&
+        data.principalNip is string && data.principalNip.size() >= 0 && data.principalNip.size() <= 50 &&
+        data.principalEmail is string && data.principalEmail.size() >= 3 && data.principalEmail.size() <= 120 &&
+        data.principalPasswordHint is string && data.principalPasswordHint.size() >= 0 && data.principalPasswordHint.size() <= 60 &&
+        data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 && data.updatedBy.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.updatedBy == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidStudent(data) {
+      return data.keys().hasAll([
+          'nis', 'name', 'className', 'gradeLevel', 'major', 'waNumber',
+          'sppBalance', 'dspBalance', 'class11Balance', 'class12Balance', 'totalBalance',
+          'paidMonths', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'nis', 'name', 'className', 'gradeLevel', 'major', 'waNumber',
+          'sppBalance', 'dspBalance', 'class11Balance', 'class12Balance', 'totalBalance',
+          'paidMonths', 'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.nis is string && data.nis.size() >= 1 && data.nis.size() <= 30 && data.nis.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.className is string && data.className.size() >= 1 && data.className.size() <= 30 &&
+        data.gradeLevel is string && data.gradeLevel in ['X', 'XI', 'XII'] &&
+        data.major is string && data.major.size() >= 1 && data.major.size() <= 60 &&
+        data.waNumber is string && data.waNumber.size() >= 8 && data.waNumber.size() <= 20 && data.waNumber.matches('^[0-9+\\-]+$') &&
+        data.sppBalance is number && data.sppBalance >= 0 && data.sppBalance <= 100000000 &&
+        data.dspBalance is number && data.dspBalance >= 0 && data.dspBalance <= 100000000 &&
+        data.class11Balance is number && data.class11Balance >= 0 && data.class11Balance <= 100000000 &&
+        data.class12Balance is number && data.class12Balance >= 0 && data.class12Balance <= 100000000 &&
+        data.totalBalance is number && data.totalBalance >= 0 && data.totalBalance <= 400000000 &&
+        data.totalBalance == (data.sppBalance + data.dspBalance + data.class11Balance + data.class12Balance) &&
+        data.paidMonths is list && data.paidMonths.size() <= 12 &&
+        (data.paidMonths.size() == 0 || (data.paidMonths[0] is string && data.paidMonths[0].size() <= 20)) &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 && data.createdBy.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.createdBy == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidTransaction(data) {
+      return data.keys().hasAll([
+          'receiptNo', 'studentId', 'studentNis', 'studentName', 'studentClass', 'studentMajor',
+          'waNumber', 'payerName', 'category', 'sppAmount', 'dspAmount', 'class11Amount', 'class12Amount',
+          'totalAmount', 'sppMonths', 'sppYear', 'notes', 'cashierName', 'txDate', 'status',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'receiptNo', 'studentId', 'studentNis', 'studentName', 'studentClass', 'studentMajor',
+          'waNumber', 'payerName', 'category', 'sppAmount', 'dspAmount', 'class11Amount', 'class12Amount',
+          'totalAmount', 'sppMonths', 'sppYear', 'notes', 'cashierName', 'txDate', 'status',
+          'createdBy', 'createdAt', 'updatedAt'
+        ]) &&
+        data.receiptNo is string && data.receiptNo.size() >= 3 && data.receiptNo.size() <= 40 &&
+        data.studentId is string && data.studentId.size() >= 1 && data.studentId.size() <= 128 && data.studentId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.studentNis is string && data.studentNis.size() >= 1 && data.studentNis.size() <= 30 &&
+        data.studentName is string && data.studentName.size() >= 1 && data.studentName.size() <= 120 &&
+        data.studentClass is string && data.studentClass.size() >= 1 && data.studentClass.size() <= 30 &&
+        data.studentMajor is string && data.studentMajor.size() >= 1 && data.studentMajor.size() <= 60 &&
+        data.waNumber is string && data.waNumber.size() >= 8 && data.waNumber.size() <= 20 &&
+        data.payerName is string && data.payerName.size() >= 1 && data.payerName.size() <= 120 &&
+        data.category is string && data.category in ['SPP', 'DSP', 'Pembiayaan Kelas XII', 'Pembiayaan Kelas XI', 'MULTI'] &&
+        data.sppAmount is number && data.sppAmount >= 0 && data.sppAmount <= 100000000 &&
+        data.dspAmount is number && data.dspAmount >= 0 && data.dspAmount <= 100000000 &&
+        data.class11Amount is number && data.class11Amount >= 0 && data.class11Amount <= 100000000 &&
+        data.class12Amount is number && data.class12Amount >= 0 && data.class12Amount <= 100000000 &&
+        data.totalAmount is number && data.totalAmount > 0 && data.totalAmount <= 400000000 &&
+        data.totalAmount == (data.sppAmount + data.dspAmount + data.class11Amount + data.class12Amount) &&
+        data.sppMonths is list && data.sppMonths.size() <= 12 &&
+        (data.sppMonths.size() == 0 || (data.sppMonths[0] is string && data.sppMonths[0].size() <= 20)) &&
+        data.sppYear is string && data.sppYear.size() >= 4 && data.sppYear.size() <= 9 &&
+        data.notes is string && data.notes.size() >= 0 && data.notes.size() <= 300 &&
+        data.cashierName is string && data.cashierName.size() >= 1 && data.cashierName.size() <= 100 &&
+        data.txDate is string && data.txDate.size() == 10 && data.txDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
+        data.status is string && data.status == 'completed' &&
+        data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 && data.createdBy.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.createdBy == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // 3. COLLECTION RULES
+    // =========================================================================
+
+    // /users/{userId}
+    match /users/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
+      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+
+      allow create: if isVerified() &&
+        isValidId(userId) &&
+        request.auth.uid == userId &&
+        isValidUserProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        (incoming().role == 'kepsek' || isAdmin());
+
+      allow update: if isVerified() &&
+        isValidId(userId) &&
+        isValidUserProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          // Action 1: Owner updates display name only (role remains immutable)
+          (
+            request.auth.uid == userId &&
+            incoming().role == existing().role &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])
+          ) ||
+          // Action 2: Admin updates role or name (for RBAC simulation / administration)
+          (
+            isAdmin() &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // /admins/{adminId}
+    match /admins/{adminId} {
+      allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
+      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+
+      allow create: if isVerified() &&
+        isValidId(adminId) &&
+        request.auth.uid == adminId &&
+        isValidAdminPrivilege(incoming()) &&
+        incoming().createdAt == request.time &&
+        isAdmin();
+
+      allow update, delete: if false;
+    }
+
+    // /settings/{settingId}
+    match /settings/{settingId} {
+      allow get: if isSignedIn() && isValidId(settingId) && (request.auth.uid == settingId || existing().updatedBy == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().updatedBy == request.auth.uid;
+
+      allow create: if isVerified() &&
+        isValidId(settingId) &&
+        request.auth.uid == settingId &&
+        isValidSchoolSettings(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isKasir();
+
+      allow update: if isVerified() &&
+        isValidId(settingId) &&
+        request.auth.uid == settingId &&
+        isValidSchoolSettings(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isKasir() && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'schoolName', 'schoolSubtitle', 'schoolAddress', 'schoolContact', 'schoolCity',
+            'logoDataUrl', 'cashierName', 'cashierNip', 'cashierEmail', 'cashierPasswordHint',
+            'principalName', 'principalNip', 'principalEmail', 'principalPasswordHint',
+            'updatedBy', 'updatedAt'
+          ]) ||
+          isAdmin()
+        );
+
+      allow delete: if false;
+    }
+
+    // /students/{studentId}
+    match /students/{studentId} {
+      allow get: if isSignedIn() && isValidId(studentId) && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().createdBy == request.auth.uid;
+
+      allow create: if isVerified() &&
+        isValidId(studentId) &&
+        isValidStudent(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isKasir();
+
+      allow update: if isVerified() &&
+        isValidId(studentId) &&
+        isValidStudent(incoming()) &&
+        incoming().createdBy == existing().createdBy &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        isKasir() && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'nis', 'name', 'className', 'gradeLevel', 'major', 'waNumber',
+            'sppBalance', 'dspBalance', 'class11Balance', 'class12Balance', 'totalBalance',
+            'paidMonths', 'updatedAt'
+          ]) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerified() &&
+        isValidId(studentId) &&
+        (existing().createdBy == request.auth.uid || isAdmin()) &&
+        isKasir();
+    }
+
+    // /transactions/{transactionId}
+    match /transactions/{transactionId} {
+      allow get: if isSignedIn() && isValidId(transactionId) && (existing().createdBy == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && existing().createdBy == request.auth.uid;
+
+      allow create: if isVerified() &&
+        isValidId(transactionId) &&
+        isValidTransaction(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        isKasir() &&
+        exists(/databases/$(database)/documents/students/$(incoming().studentId)) &&
+        get(/databases/$(database)/documents/students/$(incoming().studentId)).data.createdBy == request.auth.uid &&
+        getAfter(/databases/$(database)/documents/students/$(incoming().studentId)).data.updatedAt == request.time;
+
+      allow update: if false;
+
+      allow delete: if isVerified() &&
+        isValidId(transactionId) &&
+        (existing().createdBy == request.auth.uid || isAdmin()) &&
+        isKasir() &&
+        exists(/databases/$(database)/documents/students/$(existing().studentId)) &&
+        getAfter(/databases/$(database)/documents/students/$(existing().studentId)).data.updatedAt == request.time;
+    }
+  }
+}

@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Keuangan SMKS PGRI 1 Sukabumi",
+  "description": "Sistem Informasi Manajemen Keuangan Sekolah, Kasir POS Pembayaran SPP/DSP, Laporan Buku Kas, dan Analitik Real-Time berbasis Cloud Firestore untuk SMKS PGRI 1 Sukabumi.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

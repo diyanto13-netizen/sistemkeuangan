@@ -1,0 +1,442 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Profil pengguna sistem keuangan sekolah beserta hak akses (RBAC: kasir atau kepsek).",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID pengguna",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Nama lengkap petugas kasir atau kepala sekolah",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Alamat email resmi pengguna",
+          "minLength": 3,
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "description": "Hak akses pengguna: kasir (CRUD penuh) atau kepsek (Read-Only Eksekutif)",
+          "enum": ["kasir", "kepsek"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembuatan profil"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Waktu pembaruan profil terakhir"
+        }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt", "updatedAt"]
+    },
+    "AdminPrivilege": {
+      "title": "AdminPrivilege",
+      "description": "Dokumen penanda hak akses administrator/kasir utama.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 150
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "SchoolSettings": {
+      "title": "SchoolSettings",
+      "description": "Pengaturan identitas/kop sekolah, logo sekolah, nama pejabat kasir & kepala sekolah, serta akun akses.",
+      "type": "object",
+      "properties": {
+        "schoolName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "schoolSubtitle": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 150
+        },
+        "schoolAddress": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 250
+        },
+        "schoolContact": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 180
+        },
+        "schoolCity": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 60
+        },
+        "logoDataUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 150000
+        },
+        "cashierName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "cashierNip": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "cashierEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "cashierPasswordHint": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 60
+        },
+        "principalName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100
+        },
+        "principalNip": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "principalEmail": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 120
+        },
+        "principalPasswordHint": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 60
+        },
+        "updatedBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "schoolName",
+        "schoolSubtitle",
+        "schoolAddress",
+        "schoolContact",
+        "schoolCity",
+        "logoDataUrl",
+        "cashierName",
+        "cashierNip",
+        "cashierEmail",
+        "cashierPasswordHint",
+        "principalName",
+        "principalNip",
+        "principalEmail",
+        "principalPasswordHint",
+        "updatedBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Data induk siswa beserta rincian saldo tagihan SPP, DSP, Pembiayaan Kelas XI, dan Kelas XII.",
+      "type": "object",
+      "properties": {
+        "nis": {
+          "type": "string",
+          "description": "Nomor Induk Siswa unik",
+          "minLength": 1,
+          "maxLength": 30,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Nama lengkap siswa",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "className": {
+          "type": "string",
+          "description": "Nama kelas spesifik (misal: X TKJ 1, XI RPL 2, XII AKL 1)",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "gradeLevel": {
+          "type": "string",
+          "description": "Tingkat kelas siswa (X, XI, atau XII)",
+          "enum": ["X", "XI", "XII"]
+        },
+        "major": {
+          "type": "string",
+          "description": "Kompetensi keahlian / jurusan",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "waNumber": {
+          "type": "string",
+          "description": "Nomor WhatsApp orang tua / wali murid (format 628xxx)",
+          "minLength": 8,
+          "maxLength": 20,
+          "pattern": "^[0-9+\\-]+$"
+        },
+        "sppBalance": {
+          "type": "number",
+          "description": "Sisa tagihan SPP (Rp)"
+        },
+        "dspBalance": {
+          "type": "number",
+          "description": "Sisa tagihan Dana Sumbangan Pendidikan / DSP (Rp)"
+        },
+        "class11Balance": {
+          "type": "number",
+          "description": "Sisa tagihan Pembiayaan Kelas XI (Rp)"
+        },
+        "class12Balance": {
+          "type": "number",
+          "description": "Sisa tagihan Pembiayaan Kelas XII (Rp)"
+        },
+        "totalBalance": {
+          "type": "number",
+          "description": "Akumulasi seluruh sisa tagihan siswa (Rp)"
+        },
+        "paidMonths": {
+          "type": "array",
+          "description": "Daftar kode bulan SPP yang sudah lunas (maksimal 12 bulan dalam 1 tahun ajaran)"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID petugas pembuat data",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "nis",
+        "name",
+        "className",
+        "gradeLevel",
+        "major",
+        "waNumber",
+        "sppBalance",
+        "dspBalance",
+        "class11Balance",
+        "class12Balance",
+        "totalBalance",
+        "paidMonths",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Dokumen riwayat transaksi pembayaran kasir POS untuk satu atau beberapa pos tagihan.",
+      "type": "object",
+      "properties": {
+        "receiptNo": {
+          "type": "string",
+          "description": "Nomor kuitansi resmi",
+          "minLength": 3,
+          "maxLength": 40
+        },
+        "studentId": {
+          "type": "string",
+          "description": "ID dokumen siswa di koleksi students",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "studentNis": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "studentName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "studentClass": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 30
+        },
+        "studentMajor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        },
+        "waNumber": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 20
+        },
+        "payerName": {
+          "type": "string",
+          "description": "Nama penyetor pembayaran",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "category": {
+          "type": "string",
+          "description": "Pos pembayaran utama atau MULTI jika lebih dari 1 pos",
+          "enum": ["SPP", "DSP", "Pembiayaan Kelas XII", "Pembiayaan Kelas XI", "MULTI"]
+        },
+        "sppAmount": {
+          "type": "number"
+        },
+        "dspAmount": {
+          "type": "number"
+        },
+        "class11Amount": {
+          "type": "number"
+        },
+        "class12Amount": {
+          "type": "number"
+        },
+        "totalAmount": {
+          "type": "number"
+        },
+        "sppMonths": {
+          "type": "array",
+          "description": "Daftar bulan SPP yang dibayar pada transaksi ini (maksimal 12)"
+        },
+        "sppYear": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 9
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 300
+        },
+        "cashierName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "txDate": {
+          "type": "string",
+          "description": "Tanggal transaksi format YYYY-MM-DD",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["completed"]
+        },
+        "createdBy": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "receiptNo",
+        "studentId",
+        "studentNis",
+        "studentName",
+        "studentClass",
+        "studentMajor",
+        "waNumber",
+        "payerName",
+        "category",
+        "sppAmount",
+        "dspAmount",
+        "class11Amount",
+        "class12Amount",
+        "totalAmount",
+        "sppMonths",
+        "sppYear",
+        "notes",
+        "cashierName",
+        "txDate",
+        "status",
+        "createdBy",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Koleksi profil pengguna dan role RBAC (kasir / kepsek)"
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminPrivilege" },
+      "description": "Koleksi penanda hak akses admin/kasir yang terverifikasi"
+    },
+    "/settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SchoolSettings" },
+      "description": "Koleksi pengaturan kop sekolah, logo, identitas kasir & kepala sekolah"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Koleksi master data siswa dan saldo tagihan per pos"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Koleksi riwayat transaksi pembayaran POS"
+    }
+  }
+}
