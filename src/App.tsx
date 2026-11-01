@@ -158,7 +158,12 @@ export default function App() {
   const [authReady, setAuthReady] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
 
-  // Helper untuk menyimpan dan memuat cache lokal (agar tetap berfungsi 100% di domain eksternal seperti Vercel)
+  // ID Institusi Sekolah Terpadu agar seluruh Browser (Chrome, Edge, HP, Laptop) & Peran (Kasir/Kepsek) tersinkronisasi ke Cloud Firestore yang sama
+  const SCHOOL_CLOUD_TENANT_ID = 'staff_smks_pgri1_local';
+  const hasBackfilledStudentsRef = useRef<boolean>(false);
+  const hasBackfilledTxRef = useRef<boolean>(false);
+
+  // Helper untuk menyimpan dan memuat cache lokal
   const saveStudentsCache = (list: Student[]) => {
     try {
       localStorage.setItem('smks_pgri1_students_cache', JSON.stringify(list));
@@ -498,37 +503,79 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Attach real-time Firestore listeners once authenticated with Firebase Auth
+  // Attach real-time Firestore listeners untuk seluruh Browser (baik di AI Studio maupun Vercel)
   useEffect(() => {
     if (!authReady || !currentUser) return;
-
-    // Jika sedang dalam sesi lokal (misal domain Vercel belum terdaftar di Authorized Domains Firebase), gunakan cache lokal tanpa memicu permission error
-    if (!auth.currentUser) {
-      setDataLoading(false);
-      return;
-    }
 
     setDataLoading(true);
 
     const studentsQuery = query(
       collection(db, 'students'),
-      where('createdBy', '==', auth.currentUser.uid)
+      where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID)
     );
     const txQuery = query(
       collection(db, 'transactions'),
-      where('createdBy', '==', auth.currentUser.uid)
+      where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID)
     );
 
     const unsubStudents = onSnapshot(
       studentsQuery,
-      (snapshot) => {
-        const list: Student[] = snapshot.docs.map((d) => ({
+      async (snapshot) => {
+        const cloudList: Student[] = snapshot.docs.map((d) => ({
           id: d.id,
           ...(d.data() as Omit<Student, 'id'>),
         }));
-        list.sort((a, b) => a.nis.localeCompare(b.nis));
-        setStudents(list);
-        saveStudentsCache(list);
+
+        // Jika di Browser 1 sudah ada data siswa di cache lokal yang belum terunggah ke Cloud Firestore, unggah otomatis (Auto-Backfill)
+        let mergedList = [...cloudList];
+        if (!hasBackfilledStudentsRef.current) {
+          hasBackfilledStudentsRef.current = true;
+          try {
+            const rawLocal = localStorage.getItem('smks_pgri1_students_cache');
+            const localStudents: Student[] = rawLocal ? JSON.parse(rawLocal) : [];
+            const cloudNisSet = new Set(cloudList.map((s) => s.nis.toLowerCase()));
+            const unsyncedLocal = localStudents.filter(
+              (ls) => ls.nis && !cloudNisSet.has(ls.nis.toLowerCase())
+            );
+
+            if (unsyncedLocal.length > 0) {
+              mergedList = [...cloudList, ...unsyncedLocal];
+              const CHUNK_SIZE = 400;
+              for (let i = 0; i < unsyncedLocal.length; i += CHUNK_SIZE) {
+                const chunk = unsyncedLocal.slice(i, i + CHUNK_SIZE);
+                const batch = writeBatch(db);
+                chunk.forEach((st) => {
+                  const stRef = doc(db, 'students', st.id);
+                  batch.set(stRef, {
+                    nis: st.nis,
+                    name: st.name,
+                    className: st.className,
+                    gradeLevel: st.gradeLevel,
+                    major: st.major,
+                    waNumber: st.waNumber,
+                    sppBalance: st.sppBalance,
+                    dspBalance: st.dspBalance,
+                    class11Balance: st.class11Balance,
+                    class12Balance: st.class12Balance,
+                    totalBalance:
+                      st.sppBalance + st.dspBalance + st.class11Balance + st.class12Balance,
+                    paidMonths: (st.paidMonths || []).slice(0, 12),
+                    createdBy: SCHOOL_CLOUD_TENANT_ID,
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp(),
+                  });
+                });
+                await batch.commit();
+              }
+            }
+          } catch (syncErr) {
+            console.warn('Auto-backfill local students to cloud warning:', syncErr);
+          }
+        }
+
+        mergedList.sort((a, b) => a.nis.localeCompare(b.nis));
+        setStudents(mergedList);
+        saveStudentsCache(mergedList);
         setDataLoading(false);
       },
       (error) => {
@@ -539,25 +586,42 @@ export default function App() {
 
     const unsubTx = onSnapshot(
       txQuery,
-      (snapshot) => {
-        const list: Transaction[] = snapshot.docs.map((d) => ({
+      async (snapshot) => {
+        const cloudTxs: Transaction[] = snapshot.docs.map((d) => ({
           id: d.id,
           ...(d.data() as Omit<Transaction, 'id'>),
         }));
-        list.sort((a, b) => {
+
+        let mergedTxs = [...cloudTxs];
+        if (!hasBackfilledTxRef.current) {
+          hasBackfilledTxRef.current = true;
+          try {
+            const rawLocalTxs = localStorage.getItem('smks_pgri1_transactions_cache');
+            const localTxs: Transaction[] = rawLocalTxs ? JSON.parse(rawLocalTxs) : [];
+            const cloudIdSet = new Set(cloudTxs.map((t) => t.id));
+            const unsyncedTxs = localTxs.filter((lt) => lt.id && !cloudIdSet.has(lt.id));
+            if (unsyncedTxs.length > 0) {
+              mergedTxs = [...cloudTxs, ...unsyncedTxs];
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        mergedTxs.sort((a, b) => {
           const dateCmp = b.txDate.localeCompare(a.txDate);
           if (dateCmp !== 0) return dateCmp;
           return b.receiptNo.localeCompare(a.receiptNo);
         });
-        setTransactions(list);
-        saveTransactionsCache(list);
+        setTransactions(mergedTxs);
+        saveTransactionsCache(mergedTxs);
       },
       (error) => {
         console.warn('Firestore transactions listener fallback to local cache:', error);
       }
     );
 
-    const settingsRef = doc(db, 'settings', auth.currentUser.uid);
+    const settingsRef = doc(db, 'settings', SCHOOL_CLOUD_TENANT_ID);
     const unsubSettings = onSnapshot(
       settingsRef,
       (snap) => {
@@ -580,7 +644,7 @@ export default function App() {
             principalEmail: data.principalEmail || DEFAULT_SCHOOL_SETTINGS.principalEmail,
             principalPasswordHint:
               data.principalPasswordHint || DEFAULT_SCHOOL_SETTINGS.principalPasswordHint,
-            updatedBy: data.updatedBy || currentUser.uid,
+            updatedBy: SCHOOL_CLOUD_TENANT_ID,
           };
           setSchoolSettings(merged);
           setSettingsDocExists(true);
@@ -606,6 +670,60 @@ export default function App() {
   }, [authReady, currentUser]);
 
   const isKasir = userProfile?.role === 'kasir';
+
+  // Sinkronisasi Paksa Seluruh Data Lokal ke Cloud Firestore (Agar Muncul di Semua Browser)
+  const handleForceCloudSync = async () => {
+    if (!currentUser) return;
+    setBusyAction('Menyinkronkan seluruh data siswa & pengaturan ke Cloud Firestore...');
+    try {
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < students.length; i += CHUNK_SIZE) {
+        const chunk = students.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((st) => {
+          const stRef = doc(db, 'students', st.id);
+          batch.set(stRef, {
+            nis: st.nis,
+            name: st.name,
+            className: st.className,
+            gradeLevel: st.gradeLevel,
+            major: st.major,
+            waNumber: st.waNumber,
+            sppBalance: st.sppBalance,
+            dspBalance: st.dspBalance,
+            class11Balance: st.class11Balance,
+            class12Balance: st.class12Balance,
+            totalBalance:
+              st.sppBalance + st.dspBalance + st.class11Balance + st.class12Balance,
+            paidMonths: (st.paidMonths || []).slice(0, 12),
+            createdBy: SCHOOL_CLOUD_TENANT_ID,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+
+      const settingsRef = doc(db, 'settings', SCHOOL_CLOUD_TENANT_ID);
+      await setDoc(settingsRef, {
+        ...schoolSettings,
+        updatedBy: SCHOOL_CLOUD_TENANT_ID,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+      setSettingsDocExists(true);
+
+      showToast(
+        `Berhasil menyinkronkan ${students.length} siswa ke Cloud Firestore! Sekarang data dapat dilihat di semua browser.`,
+        'success'
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      showToast(`Gagal sinkronisasi ke Cloud: ${msg}`, 'error');
+    } finally {
+      setBusyAction(null);
+    }
+  };
 
   // Simpan Pengaturan Sekolah, Kop, Logo, Pejabat TTD & Akun ke Cloud Firestore & Cache Lokal
   const handleSaveSchoolSettings = async (updated: SchoolSettings) => {
@@ -653,7 +771,7 @@ export default function App() {
       )
         .trim()
         .slice(0, 60),
-      updatedBy: auth.currentUser?.uid || currentUser.uid,
+      updatedBy: SCHOOL_CLOUD_TENANT_ID,
     };
 
     setBusyAction('Menyimpan Pengaturan Sekolah & menyinkronkan Akun Login...');
@@ -697,25 +815,23 @@ export default function App() {
         }
       }
 
-      if (auth.currentUser) {
-        const settingsRef = doc(db, 'settings', auth.currentUser.uid);
-        if (settingsDocExists) {
-          await updateDoc(settingsRef, {
-            ...payload,
-            updatedAt: serverTimestamp(),
-          });
-        } else {
-          await setDoc(settingsRef, {
-            ...payload,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          setSettingsDocExists(true);
-        }
+      const settingsRef = doc(db, 'settings', SCHOOL_CLOUD_TENANT_ID);
+      if (settingsDocExists) {
+        await updateDoc(settingsRef, {
+          ...payload,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(settingsRef, {
+          ...payload,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        setSettingsDocExists(true);
       }
 
       showToast(
-        'Pengaturan Kop Sekolah, Logo, Pejabat TTD & Akun Login berhasil disimpan dan disinkronkan!',
+        'Pengaturan Kop Sekolah, Logo, Pejabat TTD & Akun Login berhasil disimpan ke Cloud Firestore!',
         'success'
       );
     } catch (error) {
@@ -1064,7 +1180,7 @@ export default function App() {
           class12Balance: c12,
           totalBalance,
           paidMonths: editingStudent.paidMonths.slice(0, 12),
-          createdBy: editingStudent.createdBy || currentUser.uid,
+          createdBy: SCHOOL_CLOUD_TENANT_ID,
         };
         const nextStudents = students
           .map((s) => (s.id === editingStudent.id ? updatedObj : s))
@@ -1072,25 +1188,23 @@ export default function App() {
         setStudents(nextStudents);
         saveStudentsCache(nextStudents);
 
-        if (auth.currentUser) {
-          const studentRef = doc(db, 'students', editingStudent.id);
-          await updateDoc(studentRef, {
-            nis: cleanNis,
-            name: cleanName,
-            className: cleanClass,
-            gradeLevel,
-            major: cleanMajor,
-            waNumber: cleanWa,
-            sppBalance: spp,
-            dspBalance: dsp,
-            class11Balance: c11,
-            class12Balance: c12,
-            totalBalance,
-            paidMonths: editingStudent.paidMonths.slice(0, 12),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        showToast(`Data siswa ${cleanName} (${cleanNis}) berhasil diperbarui.`, 'success');
+        const studentRef = doc(db, 'students', editingStudent.id);
+        await updateDoc(studentRef, {
+          nis: cleanNis,
+          name: cleanName,
+          className: cleanClass,
+          gradeLevel,
+          major: cleanMajor,
+          waNumber: cleanWa,
+          sppBalance: spp,
+          dspBalance: dsp,
+          class11Balance: c11,
+          class12Balance: c12,
+          totalBalance,
+          paidMonths: editingStudent.paidMonths.slice(0, 12),
+          updatedAt: serverTimestamp(),
+        });
+        showToast(`Data siswa ${cleanName} (${cleanNis}) berhasil diperbarui di Cloud.`, 'success');
       } else {
         const docId = `std_${cleanNis}_${Date.now().toString(36)}`;
         const newStudent: Student = {
@@ -1107,7 +1221,7 @@ export default function App() {
           class12Balance: c12,
           totalBalance,
           paidMonths: [],
-          createdBy: auth.currentUser?.uid || currentUser.uid,
+          createdBy: SCHOOL_CLOUD_TENANT_ID,
         };
         const nextStudents = [...students, newStudent].sort((a, b) =>
           a.nis.localeCompare(b.nis)
@@ -1115,27 +1229,25 @@ export default function App() {
         setStudents(nextStudents);
         saveStudentsCache(nextStudents);
 
-        if (auth.currentUser) {
-          const studentRef = doc(db, 'students', docId);
-          await setDoc(studentRef, {
-            nis: cleanNis,
-            name: cleanName,
-            className: cleanClass,
-            gradeLevel,
-            major: cleanMajor,
-            waNumber: cleanWa,
-            sppBalance: spp,
-            dspBalance: dsp,
-            class11Balance: c11,
-            class12Balance: c12,
-            totalBalance,
-            paidMonths: [],
-            createdBy: auth.currentUser.uid,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        showToast(`Siswa baru ${cleanName} (${cleanNis}) berhasil didaftarkan.`, 'success');
+        const studentRef = doc(db, 'students', docId);
+        await setDoc(studentRef, {
+          nis: cleanNis,
+          name: cleanName,
+          className: cleanClass,
+          gradeLevel,
+          major: cleanMajor,
+          waNumber: cleanWa,
+          sppBalance: spp,
+          dspBalance: dsp,
+          class11Balance: c11,
+          class12Balance: c12,
+          totalBalance,
+          paidMonths: [],
+          createdBy: SCHOOL_CLOUD_TENANT_ID,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        showToast(`Siswa baru ${cleanName} (${cleanNis}) berhasil didaftarkan ke Cloud.`, 'success');
       }
       resetStudentForm();
     } catch (error) {
@@ -1153,9 +1265,7 @@ export default function App() {
       const nextStudents = students.filter((s) => s.id !== st.id);
       setStudents(nextStudents);
       saveStudentsCache(nextStudents);
-      if (auth.currentUser) {
-        await deleteDoc(doc(db, 'students', st.id));
-      }
+      await deleteDoc(doc(db, 'students', st.id));
       showToast(`Data siswa ${st.name} telah dihapus.`, 'info');
       if (editingStudent?.id === st.id) resetStudentForm();
     } catch (error) {
@@ -1225,9 +1335,8 @@ export default function App() {
       return;
     }
 
-    setBusyAction(`Mengimpor ${validRows.length} siswa baru secara massal...`);
+    setBusyAction(`Mengimpor ${validRows.length} siswa baru secara massal ke Cloud Firestore...`);
     try {
-      const ownerUid = auth.currentUser?.uid || currentUser.uid;
       const importedStudents: Student[] = validRows.map((row, idx) => ({
         id: `std_${row.nis}_${Date.now().toString(36)}_${idx}`,
         nis: row.nis,
@@ -1242,7 +1351,7 @@ export default function App() {
         class12Balance: row.class12Balance,
         totalBalance: row.totalBalance,
         paidMonths: [],
-        createdBy: ownerUid,
+        createdBy: SCHOOL_CLOUD_TENANT_ID,
       }));
 
       const nextStudents = [...students, ...importedStudents].sort((a, b) =>
@@ -1251,41 +1360,39 @@ export default function App() {
       setStudents(nextStudents);
       saveStudentsCache(nextStudents);
 
-      if (auth.currentUser) {
-        const CHUNK_SIZE = 400;
-        for (let i = 0; i < importedStudents.length; i += CHUNK_SIZE) {
-          const chunk = importedStudents.slice(i, i + CHUNK_SIZE);
-          const batch = writeBatch(db);
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < importedStudents.length; i += CHUNK_SIZE) {
+        const chunk = importedStudents.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
 
-          chunk.forEach((st) => {
-            const studentRef = doc(db, 'students', st.id);
-            batch.set(studentRef, {
-              nis: st.nis,
-              name: st.name,
-              className: st.className,
-              gradeLevel: st.gradeLevel,
-              major: st.major,
-              waNumber: st.waNumber,
-              sppBalance: st.sppBalance,
-              dspBalance: st.dspBalance,
-              class11Balance: st.class11Balance,
-              class12Balance: st.class12Balance,
-              totalBalance: st.totalBalance,
-              paidMonths: [],
-              createdBy: ownerUid,
-              createdAt: serverTimestamp(),
-              updatedAt: serverTimestamp(),
-            });
+        chunk.forEach((st) => {
+          const studentRef = doc(db, 'students', st.id);
+          batch.set(studentRef, {
+            nis: st.nis,
+            name: st.name,
+            className: st.className,
+            gradeLevel: st.gradeLevel,
+            major: st.major,
+            waNumber: st.waNumber,
+            sppBalance: st.sppBalance,
+            dspBalance: st.dspBalance,
+            class11Balance: st.class11Balance,
+            class12Balance: st.class12Balance,
+            totalBalance: st.totalBalance,
+            paidMonths: [],
+            createdBy: SCHOOL_CLOUD_TENANT_ID,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
           });
+        });
 
-          await batch.commit();
-        }
+        await batch.commit();
       }
 
       setBulkImportModalOpen(false);
       setBulkImportRows([]);
       showToast(
-        `Berhasil mengimpor ${validRows.length} data siswa baru secara massal!`,
+        `Berhasil mengimpor ${validRows.length} data siswa baru ke Cloud Firestore (otomatis tampil di semua browser)!`,
         'success'
       );
     } catch (error) {
@@ -1306,7 +1413,7 @@ export default function App() {
     if (!currentUser || !isKasir) return;
     setBusyAction('Membuat data sampel siswa & transaksi SMKS PGRI 1 Sukabumi...');
     try {
-      const ownerUid = auth.currentUser?.uid || currentUser.uid;
+      const ownerUid = SCHOOL_CLOUD_TENANT_ID;
       const now = new Date();
       const formatD = (daysAgo: number) => {
         const d = new Date(now);
@@ -1475,29 +1582,27 @@ export default function App() {
       setTransactions(sampleTxs);
       saveTransactionsCache(sampleTxs);
 
-      if (auth.currentUser) {
-        const batch = writeBatch(db);
-        for (const st of sampleStudents) {
-          const stRef = doc(db, 'students', st.id);
-          const { id: _id, ...stPayload } = st;
-          batch.set(stRef, {
-            ...stPayload,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        for (const t of sampleTxs) {
-          const txRef = doc(db, 'transactions', t.id);
-          const { id: _tid, ...txPayload } = t;
-          batch.set(txRef, {
-            ...txPayload,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-        await batch.commit();
+      const batch = writeBatch(db);
+      for (const st of sampleStudents) {
+        const stRef = doc(db, 'students', st.id);
+        const { id: _id, ...stPayload } = st;
+        batch.set(stRef, {
+          ...stPayload,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
       }
-      showToast('Data sampel siswa & transaksi berhasil dimuat!', 'success');
+      for (const t of sampleTxs) {
+        const txRef = doc(db, 'transactions', t.id);
+        const { id: _tid, ...txPayload } = t;
+        batch.set(txRef, {
+          ...txPayload,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+      await batch.commit();
+      showToast('Data sampel siswa & transaksi berhasil dimuat ke Cloud Firestore!', 'success');
     } catch (error) {
       console.warn('Firestore seed fallback to local cache:', error);
       showToast('Data sampel siswa & transaksi berhasil dimuat!', 'success');
@@ -1696,10 +1801,10 @@ export default function App() {
       ),
       txDate: todayStr,
       status: 'completed',
-      createdBy: currentUser.uid,
+      createdBy: SCHOOL_CLOUD_TENANT_ID,
     };
 
-    setBusyAction('Mengeksekusi Batch Write transaksi...');
+    setBusyAction('Mengeksekusi Batch Write transaksi ke Cloud Firestore...');
     try {
       const updatedStudent: Student = {
         ...selectedPosStudent,
@@ -1719,37 +1824,35 @@ export default function App() {
       setTransactions(nextTxs);
       saveTransactionsCache(nextTxs);
 
-      if (auth.currentUser) {
-        const batch = writeBatch(db);
-        const txRef = doc(db, 'transactions', txId);
-        const studentRef = doc(db, 'students', selectedPosStudent.id);
+      const batch = writeBatch(db);
+      const txRef = doc(db, 'transactions', txId);
+      const studentRef = doc(db, 'students', selectedPosStudent.id);
 
-        const { id: _unusedId, ...txPayload } = newTxObj;
-        batch.set(txRef, {
-          ...txPayload,
-          createdBy: auth.currentUser.uid,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+      const { id: _unusedId, ...txPayload } = newTxObj;
+      batch.set(txRef, {
+        ...txPayload,
+        createdBy: SCHOOL_CLOUD_TENANT_ID,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
 
-        batch.update(studentRef, {
-          sppBalance: newSppBalance,
-          dspBalance: newDspBalance,
-          class11Balance: newClass11Balance,
-          class12Balance: newClass12Balance,
-          totalBalance: newTotalBalance,
-          paidMonths: newPaidMonths,
-          updatedAt: serverTimestamp(),
-        });
+      batch.update(studentRef, {
+        sppBalance: newSppBalance,
+        dspBalance: newDspBalance,
+        class11Balance: newClass11Balance,
+        class12Balance: newClass12Balance,
+        totalBalance: newTotalBalance,
+        paidMonths: newPaidMonths,
+        updatedAt: serverTimestamp(),
+      });
 
-        await batch.commit();
-      }
+      await batch.commit();
 
       setLastCompletedTx({ tx: newTxObj, remainingBalance: newTotalBalance });
       setCart([]);
       setPosNotes('');
       showToast(
-        `Transaksi ${receiptNo} senilai ${formatRupiah(totalAmount)} berhasil disimpan!`,
+        `Transaksi ${receiptNo} senilai ${formatRupiah(totalAmount)} berhasil disimpan ke Cloud Firestore!`,
         'success'
       );
     } catch (error) {
@@ -1809,40 +1912,38 @@ export default function App() {
       setTransactions(nextTxs);
       saveTransactionsCache(nextTxs);
 
-      if (auth.currentUser) {
-        await runTransaction(db, async (transaction) => {
-          const studentRef = doc(db, 'students', tx.studentId);
-          const txRef = doc(db, 'transactions', tx.id);
+      await runTransaction(db, async (transaction) => {
+        const studentRef = doc(db, 'students', tx.studentId);
+        const txRef = doc(db, 'transactions', tx.id);
 
-          const studentSnap = await transaction.get(studentRef);
-          if (!studentSnap.exists()) {
-            throw new Error('Dokumen siswa tidak ditemukan untuk proses refund.');
-          }
+        const studentSnap = await transaction.get(studentRef);
+        if (!studentSnap.exists()) {
+          throw new Error('Dokumen siswa tidak ditemukan untuk proses refund.');
+        }
 
-          const stData = studentSnap.data() as Omit<Student, 'id'>;
-          const refundedSpp = Math.min(100000000, stData.sppBalance + tx.sppAmount);
-          const refundedDsp = Math.min(100000000, stData.dspBalance + tx.dspAmount);
-          const refundedC11 = Math.min(100000000, stData.class11Balance + tx.class11Amount);
-          const refundedC12 = Math.min(100000000, stData.class12Balance + tx.class12Amount);
-          const refundedTotal = refundedSpp + refundedDsp + refundedC11 + refundedC12;
+        const stData = studentSnap.data() as Omit<Student, 'id'>;
+        const refundedSpp = Math.min(100000000, stData.sppBalance + tx.sppAmount);
+        const refundedDsp = Math.min(100000000, stData.dspBalance + tx.dspAmount);
+        const refundedC11 = Math.min(100000000, stData.class11Balance + tx.class11Amount);
+        const refundedC12 = Math.min(100000000, stData.class12Balance + tx.class12Amount);
+        const refundedTotal = refundedSpp + refundedDsp + refundedC11 + refundedC12;
 
-          const updatedPaidMonths = (stData.paidMonths || []).filter(
-            (m) => !tx.sppMonths.includes(m)
-          );
+        const updatedPaidMonths = (stData.paidMonths || []).filter(
+          (m) => !tx.sppMonths.includes(m)
+        );
 
-          transaction.update(studentRef, {
-            sppBalance: refundedSpp,
-            dspBalance: refundedDsp,
-            class11Balance: refundedC11,
-            class12Balance: refundedC12,
-            totalBalance: refundedTotal,
-            paidMonths: updatedPaidMonths,
-            updatedAt: serverTimestamp(),
-          });
-
-          transaction.delete(txRef);
+        transaction.update(studentRef, {
+          sppBalance: refundedSpp,
+          dspBalance: refundedDsp,
+          class11Balance: refundedC11,
+          class12Balance: refundedC12,
+          totalBalance: refundedTotal,
+          paidMonths: updatedPaidMonths,
+          updatedAt: serverTimestamp(),
         });
-      }
+
+        transaction.delete(txRef);
+      });
 
       setConfirmVoidTx(null);
       showToast(
@@ -2779,6 +2880,17 @@ export default function App() {
                 />
               ))}
             </div>
+
+            {isKasir && students.length > 0 && (
+              <button
+                onClick={handleForceCloudSync}
+                title="Sinkronkan seluruh data siswa & pengaturan ke Cloud Firestore agar tampil di semua browser"
+                className="flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 dark:border-blue-900/60 dark:bg-blue-950/60 dark:text-blue-300 whitespace-nowrap shrink-0"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Sinkronkan Cloud ({students.length})</span>
+              </button>
+            )}
 
             {isKasir && students.length === 0 && !dataLoading && (
               <button

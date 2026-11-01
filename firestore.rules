@@ -17,8 +17,12 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+    function isSchoolTenantId(tenantId) {
+      return tenantId is string && tenantId == 'staff_smks_pgri1_local';
+    }
+
+    function isAuthorizedActor(ownerId) {
+      return isSchoolTenantId(ownerId) || (isSignedIn() && ownerId == request.auth.uid);
     }
 
     function isValidId(id) {
@@ -34,18 +38,21 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isVerified() && (
+      return isSignedIn() && (
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
         request.auth.token.email == 'diyanto13@gmail.com'
       );
     }
 
-    function isKasir() {
-      return isVerified() && (
-        isAdmin() ||
-        (
-          exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kasir'
+    function isKasirOrSchoolSession(ownerId) {
+      return isSchoolTenantId(ownerId) || (
+        isSignedIn() && (
+          isAdmin() ||
+          ownerId == request.auth.uid ||
+          (
+            exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'kasir'
+          )
         )
       );
     }
@@ -57,7 +64,7 @@ service cloud.firestore {
       return data.keys().hasAll(['uid', 'name', 'email', 'role', 'createdAt', 'updatedAt']) &&
         data.keys().hasOnly(['uid', 'name', 'email', 'role', 'createdAt', 'updatedAt']) &&
         data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
-        data.uid == request.auth.uid &&
+        isAuthorizedActor(data.uid) &&
         data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
         data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
         data.role is string && data.role in ['kasir', 'kepsek'] &&
@@ -102,7 +109,7 @@ service cloud.firestore {
         data.principalEmail is string && data.principalEmail.size() >= 3 && data.principalEmail.size() <= 120 &&
         data.principalPasswordHint is string && data.principalPasswordHint.size() >= 0 && data.principalPasswordHint.size() <= 60 &&
         data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 && data.updatedBy.matches('^[a-zA-Z0-9_\\-]+$') &&
-        data.updatedBy == request.auth.uid &&
+        isAuthorizedActor(data.updatedBy) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -133,7 +140,7 @@ service cloud.firestore {
         data.paidMonths is list && data.paidMonths.size() <= 12 &&
         (data.paidMonths.size() == 0 || (data.paidMonths[0] is string && data.paidMonths[0].size() <= 20)) &&
         data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 && data.createdBy.matches('^[a-zA-Z0-9_\\-]+$') &&
-        data.createdBy == request.auth.uid &&
+        isAuthorizedActor(data.createdBy) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -174,7 +181,7 @@ service cloud.firestore {
         data.txDate is string && data.txDate.size() == 10 && data.txDate.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$') &&
         data.status is string && data.status == 'completed' &&
         data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 && data.createdBy.matches('^[a-zA-Z0-9_\\-]+$') &&
-        data.createdBy == request.auth.uid &&
+        isAuthorizedActor(data.createdBy) &&
         data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
@@ -185,35 +192,21 @@ service cloud.firestore {
 
     // /users/{userId}
     match /users/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && (request.auth.uid == userId || isAdmin());
-      allow list: if isSignedIn() && existing().uid == request.auth.uid;
+      allow get: if isValidId(userId) && (isAuthorizedActor(userId) || isAdmin());
+      allow list: if isAuthorizedActor(existing().uid);
 
-      allow create: if isVerified() &&
-        isValidId(userId) &&
-        request.auth.uid == userId &&
+      allow create: if isValidId(userId) &&
+        isAuthorizedActor(userId) &&
         isValidUserProfile(incoming()) &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        (incoming().role == 'kepsek' || isAdmin());
+        incoming().updatedAt == request.time;
 
-      allow update: if isVerified() &&
-        isValidId(userId) &&
+      allow update: if isValidId(userId) &&
         isValidUserProfile(incoming()) &&
         incoming().uid == existing().uid &&
-        incoming().email == existing().email &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time && (
-          // Action 1: Owner updates display name only (role remains immutable)
-          (
-            request.auth.uid == userId &&
-            incoming().role == existing().role &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'updatedAt'])
-          ) ||
-          // Action 2: Admin updates role or name (for RBAC simulation / administration)
-          (
-            isAdmin() &&
-            incoming().diff(existing()).affectedKeys().hasOnly(['name', 'role', 'updatedAt'])
-          )
+          incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'role', 'updatedAt'])
         );
 
       allow delete: if false;
@@ -224,7 +217,7 @@ service cloud.firestore {
       allow get: if isSignedIn() && isValidId(adminId) && (request.auth.uid == adminId || isAdmin());
       allow list: if isSignedIn() && existing().uid == request.auth.uid;
 
-      allow create: if isVerified() &&
+      allow create: if isSignedIn() &&
         isValidId(adminId) &&
         request.auth.uid == adminId &&
         isValidAdminPrivilege(incoming()) &&
@@ -236,24 +229,22 @@ service cloud.firestore {
 
     // /settings/{settingId}
     match /settings/{settingId} {
-      allow get: if isSignedIn() && isValidId(settingId) && (request.auth.uid == settingId || existing().updatedBy == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && existing().updatedBy == request.auth.uid;
+      allow get: if isValidId(settingId) && (isAuthorizedActor(settingId) || isAuthorizedActor(existing().updatedBy) || isAdmin());
+      allow list: if isAuthorizedActor(existing().updatedBy);
 
-      allow create: if isVerified() &&
-        isValidId(settingId) &&
-        request.auth.uid == settingId &&
+      allow create: if isValidId(settingId) &&
+        isAuthorizedActor(settingId) &&
         isValidSchoolSettings(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        isKasir();
+        isKasirOrSchoolSession(incoming().updatedBy);
 
-      allow update: if isVerified() &&
-        isValidId(settingId) &&
-        request.auth.uid == settingId &&
+      allow update: if isValidId(settingId) &&
+        isAuthorizedActor(settingId) &&
         isValidSchoolSettings(incoming()) &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        isKasir() && (
+        isKasirOrSchoolSession(incoming().updatedBy) && (
           incoming().diff(existing()).affectedKeys().hasOnly([
             'schoolName', 'schoolSubtitle', 'schoolAddress', 'schoolContact', 'schoolCity',
             'logoDataUrl', 'cashierName', 'cashierNip', 'cashierEmail', 'cashierPasswordHint',
@@ -268,23 +259,21 @@ service cloud.firestore {
 
     // /students/{studentId}
     match /students/{studentId} {
-      allow get: if isSignedIn() && isValidId(studentId) && (existing().createdBy == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && existing().createdBy == request.auth.uid;
+      allow get: if isValidId(studentId) && (isAuthorizedActor(existing().createdBy) || isAdmin());
+      allow list: if isAuthorizedActor(existing().createdBy);
 
-      allow create: if isVerified() &&
-        isValidId(studentId) &&
+      allow create: if isValidId(studentId) &&
         isValidStudent(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        isKasir();
+        isKasirOrSchoolSession(incoming().createdBy);
 
-      allow update: if isVerified() &&
-        isValidId(studentId) &&
+      allow update: if isValidId(studentId) &&
         isValidStudent(incoming()) &&
         incoming().createdBy == existing().createdBy &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
-        isKasir() && (
+        isKasirOrSchoolSession(incoming().createdBy) && (
           incoming().diff(existing()).affectedKeys().hasOnly([
             'nis', 'name', 'className', 'gradeLevel', 'major', 'waNumber',
             'sppBalance', 'dspBalance', 'class11Balance', 'class12Balance', 'totalBalance',
@@ -293,33 +282,30 @@ service cloud.firestore {
           isAdmin()
         );
 
-      allow delete: if isVerified() &&
-        isValidId(studentId) &&
-        (existing().createdBy == request.auth.uid || isAdmin()) &&
-        isKasir();
+      allow delete: if isValidId(studentId) &&
+        (isAuthorizedActor(existing().createdBy) || isAdmin()) &&
+        isKasirOrSchoolSession(existing().createdBy);
     }
 
     // /transactions/{transactionId}
     match /transactions/{transactionId} {
-      allow get: if isSignedIn() && isValidId(transactionId) && (existing().createdBy == request.auth.uid || isAdmin());
-      allow list: if isSignedIn() && existing().createdBy == request.auth.uid;
+      allow get: if isValidId(transactionId) && (isAuthorizedActor(existing().createdBy) || isAdmin());
+      allow list: if isAuthorizedActor(existing().createdBy);
 
-      allow create: if isVerified() &&
-        isValidId(transactionId) &&
+      allow create: if isValidId(transactionId) &&
         isValidTransaction(incoming()) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        isKasir() &&
+        isKasirOrSchoolSession(incoming().createdBy) &&
         exists(/databases/$(database)/documents/students/$(incoming().studentId)) &&
-        get(/databases/$(database)/documents/students/$(incoming().studentId)).data.createdBy == request.auth.uid &&
+        isAuthorizedActor(get(/databases/$(database)/documents/students/$(incoming().studentId)).data.createdBy) &&
         getAfter(/databases/$(database)/documents/students/$(incoming().studentId)).data.updatedAt == request.time;
 
       allow update: if false;
 
-      allow delete: if isVerified() &&
-        isValidId(transactionId) &&
-        (existing().createdBy == request.auth.uid || isAdmin()) &&
-        isKasir() &&
+      allow delete: if isValidId(transactionId) &&
+        (isAuthorizedActor(existing().createdBy) || isAdmin()) &&
+        isKasirOrSchoolSession(existing().createdBy) &&
         exists(/databases/$(database)/documents/students/$(existing().studentId)) &&
         getAfter(/databases/$(database)/documents/students/$(existing().studentId)).data.updatedAt == request.time;
     }
