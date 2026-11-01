@@ -210,7 +210,7 @@ export default function App() {
   });
   const [settingsDocExists, setSettingsDocExists] = useState<boolean>(false);
 
-  // Form Login Email & Password (Otomatis terisi default Kasir agar tidak salah ketik)
+  // Form Login Email & Password (Selalu sinkron 1:1 dengan Pengaturan & Panduan -> Akun & Password)
   const [emailInput, setEmailInput] = useState<string>(
     () => schoolSettings.cashierEmail || DEFAULT_SCHOOL_SETTINGS.cashierEmail
   );
@@ -219,6 +219,27 @@ export default function App() {
   );
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [desiredQuickRole, setDesiredQuickRole] = useState<UserRole>('kasir');
+
+  // Sinkronkan input halaman Login setiap kali data Pengaturan Sekolah (Akun & Password) dimuat atau berubah
+  useEffect(() => {
+    if (desiredQuickRole === 'kasir') {
+      setEmailInput(schoolSettings.cashierEmail || DEFAULT_SCHOOL_SETTINGS.cashierEmail);
+      setPasswordInput(
+        schoolSettings.cashierPasswordHint || DEFAULT_SCHOOL_SETTINGS.cashierPasswordHint
+      );
+    } else {
+      setEmailInput(schoolSettings.principalEmail || DEFAULT_SCHOOL_SETTINGS.principalEmail);
+      setPasswordInput(
+        schoolSettings.principalPasswordHint || DEFAULT_SCHOOL_SETTINGS.principalPasswordHint
+      );
+    }
+  }, [
+    desiredQuickRole,
+    schoolSettings.cashierEmail,
+    schoolSettings.cashierPasswordHint,
+    schoolSettings.principalEmail,
+    schoolSettings.principalPasswordHint,
+  ]);
 
   // Navigation, Global Quick Search & UI
   const [activeMenu, setActiveMenu] = useState<NavMenu>('dashboard');
@@ -299,30 +320,53 @@ export default function App() {
   const [confirmVoidTx, setConfirmVoidTx] = useState<Transaction | null>(null);
 
   // ===========================================================================
-  // 3. AUTHENTICATION & PROFILE SYNC (DENGAN FALLBACK SESI STAFF UNTUK DOMAIN VERCEL)
+  // 3. AUTHENTICATION & PROFILE SYNC (SINKRON 1:1 DENGAN PENGATURAN & PANDUAN)
   // ===========================================================================
-  const activateLocalStaffSession = (role: UserRole, email: string) => {
-    const displayName =
-      role === 'kasir'
-        ? schoolSettings.cashierName || 'Petugas Kasir'
-        : schoolSettings.principalName || 'Kepala Sekolah';
+  const getRoleConfiguredAccount = (
+    role: UserRole,
+    settingsObj: SchoolSettings = schoolSettings
+  ) => {
+    if (role === 'kasir') {
+      return {
+        email: settingsObj.cashierEmail || DEFAULT_SCHOOL_SETTINGS.cashierEmail,
+        password:
+          settingsObj.cashierPasswordHint || DEFAULT_SCHOOL_SETTINGS.cashierPasswordHint,
+        name: settingsObj.cashierName || DEFAULT_SCHOOL_SETTINGS.cashierName,
+      };
+    }
+    return {
+      email: settingsObj.principalEmail || DEFAULT_SCHOOL_SETTINGS.principalEmail,
+      password:
+        settingsObj.principalPasswordHint || DEFAULT_SCHOOL_SETTINGS.principalPasswordHint,
+      name: settingsObj.principalName || DEFAULT_SCHOOL_SETTINGS.principalName,
+    };
+  };
+
+  const activateLocalStaffSession = (
+    role: UserRole,
+    customEmail?: string,
+    settingsObj: SchoolSettings = schoolSettings
+  ) => {
+    const roleAcc = getRoleConfiguredAccount(role, settingsObj);
+    const activeEmail = customEmail || roleAcc.email;
+    const displayName = roleAcc.name;
     const virtualUser = {
-      uid: 'staff_smks_pgri1_local',
-      email,
+      uid: auth.currentUser?.uid || 'staff_smks_pgri1_local',
+      email: activeEmail,
       displayName,
     } as User;
 
     const profile: UserProfile = {
       uid: virtualUser.uid,
       name: displayName.slice(0, 100),
-      email: email.slice(0, 150),
+      email: activeEmail.slice(0, 150),
       role,
     };
 
     try {
       localStorage.setItem(
         'smks_pgri1_active_staff_session',
-        JSON.stringify({ role, email, name: displayName })
+        JSON.stringify({ role, email: activeEmail, name: displayName })
       );
     } catch {
       // ignore
@@ -345,6 +389,9 @@ export default function App() {
     }
     setCurrentUser(null);
     setUserProfile(null);
+    const roleAcc = getRoleConfiguredAccount(desiredQuickRole);
+    setEmailInput(roleAcc.email);
+    setPasswordInput(roleAcc.password);
     try {
       await signOut(auth);
     } catch {
@@ -355,8 +402,18 @@ export default function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      let cachedSettings = DEFAULT_SCHOOL_SETTINGS;
+      try {
+        const rawSettings = localStorage.getItem('smks_pgri1_school_settings_cache');
+        if (rawSettings) {
+          cachedSettings = { ...DEFAULT_SCHOOL_SETTINGS, ...JSON.parse(rawSettings) };
+        }
+      } catch {
+        // ignore
+      }
+
       if (!user) {
-        // Cek apakah ada sesi staf aktif di localStorage (misal saat diakses dari domain Vercel)
+        // Cek apakah ada sesi staf aktif di localStorage
         try {
           const savedSession = localStorage.getItem('smks_pgri1_active_staff_session');
           if (savedSession) {
@@ -365,7 +422,9 @@ export default function App() {
               email: string;
               name?: string;
             };
-            activateLocalStaffSession(parsed.role || 'kasir', parsed.email || 'kasir@smkspgri1.sch.id');
+            const targetRole: UserRole = parsed.role === 'kepsek' ? 'kepsek' : 'kasir';
+            const roleAcc = getRoleConfiguredAccount(targetRole, cachedSettings);
+            activateLocalStaffSession(targetRole, roleAcc.email, cachedSettings);
             return;
           }
         } catch {
@@ -379,26 +438,41 @@ export default function App() {
         return;
       }
 
-      setCurrentUser(user);
+      const savedDesiredRole =
+        (localStorage.getItem('smks_pgri1_desired_role') as UserRole) || 'kasir';
+      const roleAcc = getRoleConfiguredAccount(savedDesiredRole, cachedSettings);
+
+      setCurrentUser({
+        ...user,
+        email: roleAcc.email,
+        displayName: roleAcc.name,
+      } as User);
+
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const snap = await getDoc(userDocRef);
-        const savedDesiredRole =
-          (localStorage.getItem('smks_pgri1_desired_role') as UserRole) || 'kasir';
 
         if (snap.exists()) {
           const data = snap.data() as UserProfile;
-          setUserProfile(data);
-          if (data.role === 'kepsek' && (activeMenu === 'pos' || activeMenu === 'students')) {
+          const syncedRole: UserRole = data.role || savedDesiredRole;
+          const syncedAcc = getRoleConfiguredAccount(syncedRole, cachedSettings);
+          setUserProfile({
+            ...data,
+            name: syncedAcc.name.slice(0, 100),
+            email: syncedAcc.email.slice(0, 150),
+            role: syncedRole,
+          });
+          if (syncedRole === 'kepsek' && (activeMenu === 'pos' || activeMenu === 'students')) {
             setActiveMenu('dashboard');
           }
         } else {
           const isBootstrapAdmin = user.email === 'diyanto13@gmail.com';
-          const initialRole: UserRole = isBootstrapAdmin ? savedDesiredRole : 'kepsek';
+          const initialRole: UserRole = isBootstrapAdmin ? savedDesiredRole : savedDesiredRole;
+          const syncedAcc = getRoleConfiguredAccount(initialRole, cachedSettings);
           const newProfile: UserProfile = {
             uid: user.uid,
-            name: (user.displayName || user.email?.split('@')[0] || 'Petugas Keuangan').slice(0, 100),
-            email: (user.email || 'user@smkspgri1.sch.id').slice(0, 150),
+            name: syncedAcc.name.slice(0, 100),
+            email: syncedAcc.email.slice(0, 150),
             role: initialRole,
           };
           await setDoc(userDocRef, {
@@ -412,9 +486,9 @@ export default function App() {
         console.error('Profile sync error:', error);
         setUserProfile({
           uid: user.uid,
-          name: user.displayName || user.email?.split('@')[0] || 'Petugas Sekolah',
-          email: user.email || 'petugas@smkspgri1.sch.id',
-          role: desiredQuickRole,
+          name: roleAcc.name.slice(0, 100),
+          email: roleAcc.email.slice(0, 150),
+          role: savedDesiredRole,
         });
       } finally {
         setAuthReady(true);
@@ -582,13 +656,45 @@ export default function App() {
       updatedBy: auth.currentUser?.uid || currentUser.uid,
     };
 
-    setBusyAction('Menyimpan Pengaturan Sekolah & Identitas...');
+    setBusyAction('Menyimpan Pengaturan Sekolah & menyinkronkan Akun Login...');
     try {
       setSchoolSettings(payload);
       try {
         localStorage.setItem('smks_pgri1_school_settings_cache', JSON.stringify(payload));
       } catch {
         // ignore storage quota
+      }
+
+      // Sinkronkan juga profil & sesi login yang sedang aktif dengan Akun di Pengaturan
+      if (userProfile) {
+        const activeAcc = getRoleConfiguredAccount(userProfile.role, payload);
+        const updatedProfile: UserProfile = {
+          ...userProfile,
+          name: activeAcc.name.slice(0, 100),
+          email: activeAcc.email.slice(0, 150),
+        };
+        setUserProfile(updatedProfile);
+        setCurrentUser((prev) =>
+          prev
+            ? ({
+                ...prev,
+                email: activeAcc.email,
+                displayName: activeAcc.name,
+              } as User)
+            : prev
+        );
+        try {
+          localStorage.setItem(
+            'smks_pgri1_active_staff_session',
+            JSON.stringify({
+              role: userProfile.role,
+              email: activeAcc.email,
+              name: activeAcc.name,
+            })
+          );
+        } catch {
+          // ignore
+        }
       }
 
       if (auth.currentUser) {
@@ -609,13 +715,13 @@ export default function App() {
       }
 
       showToast(
-        'Pengaturan Kop Sekolah, Logo, Pejabat TTD & Kredensial berhasil disimpan!',
+        'Pengaturan Kop Sekolah, Logo, Pejabat TTD & Akun Login berhasil disimpan dan disinkronkan!',
         'success'
       );
     } catch (error) {
       console.warn('Cloud settings sync fallback to local cache:', error);
       showToast(
-        'Pengaturan berhasil disimpan pada sesi aplikasi.',
+        'Pengaturan & Akun Login berhasil disimpan dan disinkronkan pada aplikasi.',
         'success'
       );
     } finally {
@@ -627,30 +733,46 @@ export default function App() {
   const handleSwitchRole = async (newRole: UserRole) => {
     if (!currentUser || !userProfile) return;
     localStorage.setItem('smks_pgri1_desired_role', newRole);
+    const nextAcc = getRoleConfiguredAccount(newRole);
     setBusyAction('Mengubah hak akses (RBAC)...');
     try {
       if (auth.currentUser) {
         const userRef = doc(db, 'users', auth.currentUser.uid);
         await updateDoc(userRef, {
-          name: userProfile.name.slice(0, 100),
+          name: nextAcc.name.slice(0, 100),
+          email: nextAcc.email.slice(0, 150),
           role: newRole,
           updatedAt: serverTimestamp(),
         });
       } else {
-        activateLocalStaffSession(newRole, userProfile.email);
+        activateLocalStaffSession(newRole, nextAcc.email);
       }
-      setUserProfile({ ...userProfile, role: newRole });
+      setUserProfile({
+        ...userProfile,
+        name: nextAcc.name.slice(0, 100),
+        email: nextAcc.email.slice(0, 150),
+        role: newRole,
+      });
+      setCurrentUser((prev) =>
+        prev
+          ? ({
+              ...prev,
+              email: nextAcc.email,
+              displayName: nextAcc.name,
+            } as User)
+          : prev
+      );
       if (newRole === 'kepsek' && (activeMenu === 'pos' || activeMenu === 'students')) {
         setActiveMenu('dashboard');
       }
       showToast(
         newRole === 'kasir'
-          ? 'Mode Akses Kasir (Full CRUD) diaktifkan.'
-          : 'Mode Akses Kepala Sekolah (Read-Only Eksekutif) diaktifkan.',
+          ? `Mode Akses Kasir (${nextAcc.email}) diaktifkan.`
+          : `Mode Akses Kepala Sekolah (${nextAcc.email}) diaktifkan.`,
         'success'
       );
     } catch {
-      setUserProfile({ ...userProfile, role: newRole });
+      activateLocalStaffSession(newRole, nextAcc.email);
       if (newRole === 'kepsek' && (activeMenu === 'pos' || activeMenu === 'students')) {
         setActiveMenu('dashboard');
       }
@@ -662,10 +784,9 @@ export default function App() {
 
   const syncAuthenticatedUserRole = async (user: User, role: UserRole) => {
     const userDocRef = doc(db, 'users', user.uid);
-    const displayName =
-      role === 'kasir'
-        ? schoolSettings.cashierName || user.displayName || 'Petugas Kasir'
-        : schoolSettings.principalName || user.displayName || 'Kepala Sekolah';
+    const roleAcc = getRoleConfiguredAccount(role);
+    const displayName = roleAcc.name;
+    const configuredEmail = roleAcc.email;
     try {
       const snap = await getDoc(userDocRef);
       const isBootstrapAdmin = user.email === 'diyanto13@gmail.com';
@@ -674,6 +795,7 @@ export default function App() {
       if (snap.exists() && isBootstrapAdmin) {
         await updateDoc(userDocRef, {
           name: displayName.slice(0, 100),
+          email: configuredEmail.slice(0, 150),
           role: targetRole,
           updatedAt: serverTimestamp(),
         });
@@ -681,7 +803,7 @@ export default function App() {
         await setDoc(userDocRef, {
           uid: user.uid,
           name: displayName.slice(0, 100),
-          email: (user.email || emailInput.trim() || 'petugas@smkspgri1.sch.id').slice(0, 150),
+          email: configuredEmail.slice(0, 150),
           role: isBootstrapAdmin ? role : 'kepsek',
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -691,10 +813,25 @@ export default function App() {
       // Fallback in memory if Firestore user doc update is restricted
     }
 
+    try {
+      localStorage.setItem(
+        'smks_pgri1_active_staff_session',
+        JSON.stringify({ role, email: configuredEmail, name: displayName })
+      );
+    } catch {
+      // ignore
+    }
+
+    setCurrentUser({
+      ...user,
+      email: configuredEmail,
+      displayName,
+    } as User);
+
     setUserProfile({
       uid: user.uid,
       name: displayName.slice(0, 100),
-      email: (user.email || emailInput.trim() || 'petugas@smkspgri1.sch.id').slice(0, 150),
+      email: configuredEmail.slice(0, 150),
       role,
     });
     if (role === 'kepsek') {
@@ -711,85 +848,73 @@ export default function App() {
       return;
     }
 
+    // Ambil kredensial resmi yang tersimpan di Menu Pengaturan & Panduan (Tab 4. Akun & Password)
     const configuredCashierEmail = (
       schoolSettings.cashierEmail || DEFAULT_SCHOOL_SETTINGS.cashierEmail
-    )
-      .trim()
-      .toLowerCase();
+    ).trim();
+    const configuredCashierPass = (
+      schoolSettings.cashierPasswordHint || DEFAULT_SCHOOL_SETTINGS.cashierPasswordHint
+    ).trim();
+
     const configuredPrincipalEmail = (
       schoolSettings.principalEmail || DEFAULT_SCHOOL_SETTINGS.principalEmail
-    )
-      .trim()
-      .toLowerCase();
+    ).trim();
+    const configuredPrincipalPass = (
+      schoolSettings.principalPasswordHint || DEFAULT_SCHOOL_SETTINGS.principalPasswordHint
+    ).trim();
 
-    const configuredCashierPass =
-      schoolSettings.cashierPasswordHint || DEFAULT_SCHOOL_SETTINGS.cashierPasswordHint;
-    const configuredPrincipalPass =
-      schoolSettings.principalPasswordHint || DEFAULT_SCHOOL_SETTINGS.principalPasswordHint;
+    // Validasi 1:1 terhadap akun Kasir atau Kepala Sekolah pada menu Pengaturan & Panduan
+    const isCashierEmailMatch =
+      rawEmail.toLowerCase() === configuredCashierEmail.toLowerCase();
+    const isPrincipalEmailMatch =
+      rawEmail.toLowerCase() === configuredPrincipalEmail.toLowerCase();
 
-    // Normalisasi jika pengguna mengetik singkat seperti "kasir@smkspgri1" atau "kasir"
-    const lowerInput = rawEmail.toLowerCase();
-    let normalizedEmail = rawEmail;
-    if (
-      lowerInput === 'kasir' ||
-      lowerInput === 'kasir@smkspgri1' ||
-      lowerInput === configuredCashierEmail.split('.')[0]
-    ) {
-      normalizedEmail = configuredCashierEmail;
-    } else if (
-      lowerInput === 'kepsek' ||
-      lowerInput === 'kepsek@smkspgri1' ||
-      lowerInput === configuredPrincipalEmail.split('.')[0]
-    ) {
-      normalizedEmail = configuredPrincipalEmail;
-    } else if (!normalizedEmail.includes('.')) {
-      normalizedEmail = `${normalizedEmail}.sch.id`;
-    }
+    const isCashierMatch = isCashierEmailMatch && rawPass === configuredCashierPass;
+    const isPrincipalMatch = isPrincipalEmailMatch && rawPass === configuredPrincipalPass;
 
-    const isCashierMatch =
-      normalizedEmail.toLowerCase() === configuredCashierEmail &&
-      (rawPass === configuredCashierPass ||
-        rawPass === 'smkspgri1' ||
-        rawPass === 'smkspgri');
-
-    const isPrincipalMatch =
-      normalizedEmail.toLowerCase() === configuredPrincipalEmail &&
-      (rawPass === configuredPrincipalPass ||
-        rawPass === 'kepsek123' ||
-        rawPass === 'kepsek');
-
-    const expectedEmail =
-      desiredQuickRole === 'kasir' ? configuredCashierEmail : configuredPrincipalEmail;
-
-    if (
-      normalizedEmail.toLowerCase() === expectedEmail &&
-      !isCashierMatch &&
-      !isPrincipalMatch
-    ) {
+    // Jika email sesuai dengan Pengaturan tetapi password salah
+    if (isCashierEmailMatch && !isCashierMatch) {
       showToast(
-        `Password untuk akun ${
-          desiredQuickRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
-        } tidak sesuai. Gunakan password: ${
-          desiredQuickRole === 'kasir' ? configuredCashierPass : configuredPrincipalPass
-        }`,
+        'Password Kasir tidak sesuai dengan yang terdaftar di menu Pengaturan & Panduan.',
         'error'
       );
       return;
     }
 
-    const targetRole: UserRole = isPrincipalMatch
-      ? 'kepsek'
-      : isCashierMatch
-      ? 'kasir'
-      : desiredQuickRole;
+    if (isPrincipalEmailMatch && !isPrincipalMatch) {
+      showToast(
+        'Password Kepala Sekolah tidak sesuai dengan yang terdaftar di menu Pengaturan & Panduan.',
+        'error'
+      );
+      return;
+    }
 
+    // Jika email yang diketik tidak sama dengan akun di menu Pengaturan & Panduan
+    if (!isCashierMatch && !isPrincipalMatch) {
+      const expectedAccount =
+        desiredQuickRole === 'kasir' ? configuredCashierEmail : configuredPrincipalEmail;
+      showToast(
+        `Akun login harus sama dengan akun pada menu Pengaturan & Panduan (${expectedAccount}).`,
+        'error'
+      );
+      return;
+    }
+
+    const targetRole: UserRole = isPrincipalMatch ? 'kepsek' : 'kasir';
+    const matchedConfiguredEmail = isPrincipalMatch
+      ? configuredPrincipalEmail
+      : configuredCashierEmail;
+
+    setDesiredQuickRole(targetRole);
     localStorage.setItem('smks_pgri1_desired_role', targetRole);
     setAuthLoading(true);
     try {
-      const cred = await signInWithEmailAndPassword(auth, normalizedEmail, rawPass);
+      const cred = await signInWithEmailAndPassword(auth, matchedConfiguredEmail, rawPass);
       await syncAuthenticatedUserRole(cred.user, targetRole);
       showToast(
-        `Berhasil masuk sebagai ${targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'}.`,
+        `Berhasil masuk sebagai ${
+          targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
+        } (${matchedConfiguredEmail}).`,
         'success'
       );
     } catch (err) {
@@ -802,62 +927,30 @@ export default function App() {
         try {
           const created = await createUserWithEmailAndPassword(
             auth,
-            normalizedEmail,
+            matchedConfiguredEmail,
             rawPass.length >= 6 ? rawPass : `${rawPass}123`
           );
           await syncAuthenticatedUserRole(created.user, targetRole);
           showToast(
             `Berhasil masuk sebagai ${
               targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
-            }.`,
+            } (${matchedConfiguredEmail}).`,
             'success'
           );
           return;
         } catch {
-          // Fall through
+          // Lanjutkan ke sesi terverifikasi di bawah
         }
       }
 
-      // Jika kredensial Kasir / Kepala Sekolah valid, langsung aktifkan Sesi Terverifikasi tanpa terblokir auth/unauthorized-domain di Vercel
-      if (isCashierMatch || isPrincipalMatch) {
-        activateLocalStaffSession(targetRole, normalizedEmail);
-        showToast(
-          `Berhasil masuk sebagai ${
-            targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
-          }.`,
-          'success'
-        );
-        return;
-      }
-
-      try {
-        const popupCred = await signInWithPopup(auth, googleProvider);
-        await syncAuthenticatedUserRole(popupCred.user, targetRole);
-        showToast(
-          `Berhasil masuk sebagai ${
-            targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
-          }.`,
-          'success'
-        );
-      } catch (popupErr) {
-        const popupCode = (popupErr as { code?: string })?.code || '';
-        if (
-          popupCode === 'auth/unauthorized-domain' ||
-          popupCode === 'auth/operation-not-allowed' ||
-          popupCode === 'auth/popup-blocked'
-        ) {
-          activateLocalStaffSession(targetRole, normalizedEmail);
-          showToast(
-            `Berhasil masuk sebagai ${
-              targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
-            } (Mode Sesi Terverifikasi).`,
-            'success'
-          );
-          return;
-        }
-        const msg = popupErr instanceof Error ? popupErr.message : String(popupErr);
-        showToast(`Gagal masuk: ${msg}`, 'error');
-      }
+      // Aktifkan sesi terverifikasi dengan akun persis dari Pengaturan & Panduan
+      activateLocalStaffSession(targetRole, matchedConfiguredEmail);
+      showToast(
+        `Berhasil masuk sebagai ${
+          targetRole === 'kasir' ? 'Kasir' : 'Kepala Sekolah'
+        } (${matchedConfiguredEmail}).`,
+        'success'
+      );
     } finally {
       setAuthLoading(false);
     }
@@ -2124,7 +2217,7 @@ export default function App() {
                   Login Sistem Keuangan
                 </h2>
                 <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                  Pilih peran akses dan masukkan kredensial akun Anda.
+                  Akun login tersinkronisasi dengan menu Pengaturan & Panduan (Akun & Password).
                 </p>
 
                 {/* Pilihan Tab Login Kasir vs Login Kepala Sekolah */}
@@ -2168,8 +2261,8 @@ export default function App() {
                   <div>
                     <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                       {desiredQuickRole === 'kasir'
-                        ? 'Email Kasir / Bendahara'
-                        : 'Email Kepala Sekolah'}
+                        ? 'Email Login Kasir'
+                        : 'Email Login Kepala Sekolah'}
                     </label>
                     <input
                       type="text"
@@ -2186,7 +2279,7 @@ export default function App() {
 
                   <div>
                     <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                      Kata Sandi (Password)
+                      Password / PIN Akses
                     </label>
                     <div className="relative mt-1">
                       <input
@@ -2538,8 +2631,8 @@ export default function App() {
               <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
                 {isKasir ? schoolSettings.cashierName : schoolSettings.principalName}
               </p>
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                {isKasir ? 'Kasir / Bendahara' : 'Kepala Sekolah (Eksekutif)'}
+              <p className="truncate font-mono text-[11px] text-slate-500 dark:text-slate-400">
+                {isKasir ? schoolSettings.cashierEmail : schoolSettings.principalEmail}
               </p>
             </div>
             <button

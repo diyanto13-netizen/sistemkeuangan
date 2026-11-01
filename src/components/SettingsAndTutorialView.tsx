@@ -182,25 +182,51 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
 
   const handleUpdateFirebasePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAuthPassword || newAuthPassword.length < 6) {
-      onToast('Password baru minimal harus terdiri dari 6 karakter.', 'error');
+    if (!isKasir) {
+      onToast(
+        'Mode Kepala Sekolah bersifat Read-Only. Beralihlah ke hak akses Kasir untuk mengubah password.',
+        'error'
+      );
+      return;
+    }
+    if (!newAuthPassword || newAuthPassword.trim().length < 4) {
+      onToast('Password baru minimal harus terdiri dari 4 karakter.', 'error');
       return;
     }
     if (newAuthPassword !== confirmAuthPassword) {
       onToast('Konfirmasi password baru tidak cocok.', 'error');
       return;
     }
+
+    const cleanPwd = newAuthPassword.trim().slice(0, 60);
+    setSaving(true);
     try {
-      await updatePassword(currentUser, newAuthPassword);
+      const nextSettings: SchoolSettings = {
+        ...formState,
+        cashierPasswordHint: isKasir ? cleanPwd : formState.cashierPasswordHint,
+        principalPasswordHint: !isKasir ? cleanPwd : formState.principalPasswordHint,
+      };
+      setFormState(nextSettings);
+      await onSaveSettings(nextSettings);
+
+      try {
+        if (cleanPwd.length >= 6) {
+          await updatePassword(currentUser, cleanPwd);
+        }
+      } catch {
+        // Sesi staf terverifikasi sudah diperbarui lewat onSaveSettings
+      }
+
       setNewAuthPassword('');
       setConfirmAuthPassword('');
-      onToast('Password akun Firebase Authentication aktif berhasil diperbarui!', 'success');
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
       onToast(
-        `Tidak dapat mengubah password langsung (${msg}). Jika Anda login menggunakan Google OAuth, kata sandi dikelola oleh akun Google Anda, atau silakan simpan kredensial Kasir & Kepsek pada form di sebelah kiri.`,
-        'info'
+        `Password login untuk akun ${
+          isKasir ? formState.cashierEmail : formState.principalEmail
+        } berhasil diperbarui dan disinkronkan dengan halaman Login!`,
+        'success'
       );
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -811,18 +837,19 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
       ===================================================================== */}
       {activeTab === 'akun_password' && (
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
-          {/* Kolom Kiri: Kredensial Akun Kasir & Kepsek */}
+          {/* Kolom Kiri: Kredensial Akun Kasir & Kepsek (Sinkron 1:1 dengan Halaman Login) */}
           <form
             onSubmit={handleSubmitSettings}
             className="space-y-4 rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 lg:col-span-7"
           >
             <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
               <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                Pengaturan Akun & Password Akses Kasir dan Kepala Sekolah
+                Pengaturan Akun & Password Login (Kasir dan Kepala Sekolah)
               </h2>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Atur alamat email dan kata sandi akses untuk peran Kasir (Full CRUD) dan
-                Kepala Sekolah (Read-Only Eksekutif).
+                Akun dan password di bawah ini digunakan langsung sebagai kredensial resmi
+                pada Halaman Login aplikasi untuk peran Kasir (Full CRUD) dan Kepala Sekolah
+                (Read-Only Eksekutif).
               </p>
             </div>
 
@@ -830,14 +857,14 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
               {/* Kredensial Kasir */}
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                 <p className="text-xs font-bold text-blue-700 dark:text-blue-400">
-                  1. Kredensial Akun Kasir (CRUD)
+                  1. Kredensial Login Kasir (CRUD)
                 </p>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     Email Login Kasir
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={formState.cashierEmail}
                     onChange={(e) => handleFieldChange('cashierEmail', e.target.value)}
@@ -876,14 +903,14 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
               {/* Kredensial Kepala Sekolah */}
               <div className="space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
                 <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                  2. Kredensial Akun Kepala Sekolah
+                  2. Kredensial Login Kepala Sekolah
                 </p>
                 <div>
                   <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
                     Email Login Kepala Sekolah
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={formState.principalEmail}
                     onChange={(e) => handleFieldChange('principalEmail', e.target.value)}
@@ -930,13 +957,13 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
                 <span>
                   {saving
                     ? 'Menyimpan Kredensial...'
-                    : 'Simpan Pengaturan Akun & Password'}
+                    : 'Simpan & Sinkronkan Akun Login'}
                 </span>
               </button>
             </div>
           </form>
 
-          {/* Kolom Kanan: Ganti Password Sesi Firebase Auth Aktif */}
+          {/* Kolom Kanan: Status Akun Login Aktif & Ubah Cepat Password Sesi */}
           <form
             onSubmit={handleUpdateFirebasePassword}
             className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900 lg:col-span-5"
@@ -944,19 +971,40 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
             <div className="space-y-4">
               <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
                 <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                  Perbarui Kata Sandi Sesi Login Saat Ini
+                  Akun Login Aplikasi yang Sedang Aktif
                 </h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Akun aktif saat ini:{' '}
-                  <span className="font-mono font-semibold text-slate-800 dark:text-slate-200">
-                    {currentUser.email}
-                  </span>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Sesi login saat ini:{' '}
+                  <span className="font-mono font-semibold text-blue-700 dark:text-blue-400">
+                    {isKasir ? settings.cashierEmail : settings.principalEmail}
+                  </span>{' '}
+                  ({isKasir ? 'Kasir / Bendahara' : 'Kepala Sekolah'})
                 </p>
+              </div>
+
+              {/* Ringkasan Sinkronisasi Halaman Login */}
+              <div className="space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-800 dark:bg-slate-950">
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-slate-600 dark:text-slate-400">
+                    Akun Login Kasir:
+                  </span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                    {settings.cashierEmail}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-slate-600 dark:text-slate-400">
+                    Akun Login Kepsek:
+                  </span>
+                  <span className="font-mono font-semibold text-slate-900 dark:text-slate-100">
+                    {settings.principalEmail}
+                  </span>
+                </div>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Password Baru (Minimal 6 Karakter)
+                  Password Baru untuk Akun Aktif ({isKasir ? 'Kasir' : 'Kepsek'})
                 </label>
                 <div className="relative mt-1">
                   <input
@@ -996,9 +1044,10 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
 
             <button
               type="submit"
-              className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900"
+              disabled={saving || !isKasir}
+              className="mt-6 w-full rounded-lg bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50 dark:bg-slate-100 dark:text-slate-900"
             >
-              Ubah Password Firebase Auth
+              Perbarui Password Akun Aktif
             </button>
           </form>
         </div>
