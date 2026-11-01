@@ -233,9 +233,13 @@ export default function App() {
     remainingBalance: number;
   } | null>(null);
 
-  // Laporan & Buku Kas State
+  // Laporan (Rekap Harian, Laporan Bulanan & Buku Kas) State
   const todayStr = useMemo(() => new Date().toISOString().slice(0, 10), []);
-  const [reportTab, setReportTab] = useState<'daily' | 'cashbook'>('daily');
+  const currentMonthStr = useMemo(() => todayStr.slice(0, 7), [todayStr]);
+  const [reportTab, setReportTab] = useState<'daily' | 'monthly' | 'cashbook'>('monthly');
+  const [selectedReportMonth, setSelectedReportMonth] = useState<string>(() =>
+    new Date().toISOString().slice(0, 7)
+  );
   const [dateStart, setDateStart] = useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -1433,23 +1437,51 @@ export default function App() {
     };
   }, [transactions, students, todayStr]);
 
-  // Filtered Transactions for Reports (Daily vs Cashbook)
-  const filteredReportTransactions = useMemo(() => {
+  // Helper label nama bulan Indonesia untuk Laporan Bulanan (YYYY-MM -> "November 2026")
+  const selectedMonthLabel = useMemo(() => {
+    const monthNames = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    const [yearPart, monthPart] = selectedReportMonth.split('-');
+    const mIdx = Number(monthPart) - 1;
+    if (!yearPart || isNaN(mIdx) || mIdx < 0 || mIdx > 11) {
+      return selectedReportMonth;
+    }
+    return `${monthNames[mIdx]} ${yearPart}`;
+  }, [selectedReportMonth]);
+
+  const shiftSelectedMonth = (deltaMonths: number) => {
+    const [yStr, mStr] = selectedReportMonth.split('-');
+    const y = Number(yStr) || new Date().getFullYear();
+    const m = (Number(mStr) || 1) - 1;
+    const d = new Date(y, m + deltaMonths, 1);
+    const nextY = d.getFullYear();
+    const nextM = String(d.getMonth() + 1).padStart(2, '0');
+    setSelectedReportMonth(`${nextY}-${nextM}`);
+    setReportPage(1);
+  };
+
+  // Transaksi pada periode aktif (sebelum filter dropdown kategori tunggal) untuk menghitung Rekapitulasi Per Kategori secara utuh
+  const periodReportTransactions = useMemo(() => {
     return transactions.filter((tx) => {
       if (reportTab === 'daily') {
         if (tx.txDate !== todayStr) return false;
+      } else if (reportTab === 'monthly') {
+        if (!tx.txDate.startsWith(selectedReportMonth)) return false;
       } else {
         if (dateStart && tx.txDate < dateStart) return false;
         if (dateEnd && tx.txDate > dateEnd) return false;
-      }
-
-      if (reportCategoryFilter !== 'ALL') {
-        if (reportCategoryFilter === 'SPP' && tx.sppAmount <= 0) return false;
-        if (reportCategoryFilter === 'DSP' && tx.dspAmount <= 0) return false;
-        if (reportCategoryFilter === 'Pembiayaan Kelas XI' && tx.class11Amount <= 0)
-          return false;
-        if (reportCategoryFilter === 'Pembiayaan Kelas XII' && tx.class12Amount <= 0)
-          return false;
       }
 
       if (reportSearch.trim()) {
@@ -1469,11 +1501,76 @@ export default function App() {
     transactions,
     reportTab,
     todayStr,
+    selectedReportMonth,
     dateStart,
     dateEnd,
-    reportCategoryFilter,
     reportSearch,
   ]);
+
+  // Rekapitulasi Total Otomatis untuk Setiap Kategori (SPP, DSP, Kls XI, Kls XII)
+  const reportCategoryRecap = useMemo(() => {
+    const sppTotal = periodReportTransactions.reduce((sum, t) => sum + t.sppAmount, 0);
+    const sppCount = periodReportTransactions.filter((t) => t.sppAmount > 0).length;
+
+    const dspTotal = periodReportTransactions.reduce((sum, t) => sum + t.dspAmount, 0);
+    const dspCount = periodReportTransactions.filter((t) => t.dspAmount > 0).length;
+
+    const class11Total = periodReportTransactions.reduce(
+      (sum, t) => sum + t.class11Amount,
+      0
+    );
+    const class11Count = periodReportTransactions.filter(
+      (t) => t.class11Amount > 0
+    ).length;
+
+    const class12Total = periodReportTransactions.reduce(
+      (sum, t) => sum + t.class12Amount,
+      0
+    );
+    const class12Count = periodReportTransactions.filter(
+      (t) => t.class12Amount > 0
+    ).length;
+
+    const grandTotal = periodReportTransactions.reduce(
+      (sum, t) => sum + t.totalAmount,
+      0
+    );
+
+    const pct = (val: number) =>
+      grandTotal > 0 ? Math.round((val / grandTotal) * 1000) / 10 : 0;
+
+    return {
+      sppTotal,
+      sppCount,
+      sppPct: pct(sppTotal),
+      dspTotal,
+      dspCount,
+      dspPct: pct(dspTotal),
+      class11Total,
+      class11Count,
+      class11Pct: pct(class11Total),
+      class12Total,
+      class12Count,
+      class12Pct: pct(class12Total),
+      grandTotal,
+      txCount: periodReportTransactions.length,
+    };
+  }, [periodReportTransactions]);
+
+  // Filtered Transactions for Reports Table (Daily / Monthly / Cashbook + Category Filter)
+  const filteredReportTransactions = useMemo(() => {
+    return periodReportTransactions.filter((tx) => {
+      if (reportCategoryFilter !== 'ALL') {
+        if (reportCategoryFilter === 'SPP' && tx.sppAmount <= 0) return false;
+        if (reportCategoryFilter === 'DSP' && tx.dspAmount <= 0) return false;
+        if (reportCategoryFilter === 'Pembiayaan Kelas XI' && tx.class11Amount <= 0)
+          return false;
+        if (reportCategoryFilter === 'Pembiayaan Kelas XII' && tx.class12Amount <= 0)
+          return false;
+      }
+      return true;
+    });
+  }, [periodReportTransactions, reportCategoryFilter]);
 
   const totalReportPages = Math.max(
     1,
@@ -1554,6 +1651,19 @@ export default function App() {
       );
     });
   }, [transactions, selectedHistoryStudentId, historySearch]);
+
+  const globalSearchMatches = useMemo(() => {
+    const q = globalQuickSearch.trim().toLowerCase();
+    if (!q) return [];
+    return students
+      .filter(
+        (s) =>
+          s.nis.toLowerCase().includes(q) ||
+          s.name.toLowerCase().includes(q) ||
+          s.className.toLowerCase().includes(q)
+      )
+      .slice(0, 6);
+  }, [students, globalQuickSearch]);
 
   // ===========================================================================
   // 8. LOGIN VIEW (IF NOT AUTHENTICATED)
@@ -1871,19 +1981,6 @@ export default function App() {
     'LAPORAN & PIUTANG',
     'SISTEM & PANDUAN',
   ];
-
-  const globalSearchMatches = useMemo(() => {
-    const q = globalQuickSearch.trim().toLowerCase();
-    if (!q) return [];
-    return students
-      .filter(
-        (s) =>
-          s.nis.toLowerCase().includes(q) ||
-          s.name.toLowerCase().includes(q) ||
-          s.className.toLowerCase().includes(q)
-      )
-      .slice(0, 6);
-  }, [students, globalQuickSearch]);
 
   return (
     <div className="flex min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
@@ -3246,31 +3343,35 @@ export default function App() {
           )}
 
           {/* =================================================================
-              MODUL 4: LAPORAN REKAP HARIAN & BUKU KAS
+              MODUL 4: LAPORAN REKAP HARIAN, LAPORAN BULANAN & BUKU KAS
           ================================================================= */}
           {activeMenu === 'reports' && (
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <h1 className="font-display text-xl font-bold text-slate-900 dark:text-slate-100">
-                    Laporan Rekap Harian & Buku Kas Sekolah
+                    Laporan Bulanan, Rekap Harian & Buku Kas Sekolah
                   </h1>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Dilengkapi pencarian instan, paginasi, ekspor PDF resmi berkolom tanda
-                    tangan, dan ekspor Excel (.xls).
+                    Memfilter transaksi berdasarkan bulan atau periode tanggal secara otomatis dan
+                    menghitung rekapitulasi total untuk setiap kategori (SPP, DSP, Kls XI, Kls XII).
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() =>
                       generateCashbookPDF(
                         filteredReportTransactions,
                         reportTab === 'daily'
                           ? 'REKAPITULASI KAS HARIAN'
+                          : reportTab === 'monthly'
+                          ? 'LAPORAN KEUANGAN BULANAN'
                           : 'LAPORAN BUKU KAS UMUM',
                         reportTab === 'daily'
                           ? todayStr
+                          : reportTab === 'monthly'
+                          ? `Bulan ${selectedMonthLabel}`
                           : `${dateStart} s/d ${dateEnd}`,
                         schoolSettings
                       )
@@ -3285,7 +3386,9 @@ export default function App() {
                       exportTransactionsToExcel(
                         filteredReportTransactions,
                         reportTab === 'daily'
-                          ? 'Rekap_Harian_SMKS_PGRI_1'
+                          ? `Rekap_Harian_${todayStr}`
+                          : reportTab === 'monthly'
+                          ? `Laporan_Bulanan_${selectedReportMonth}`
                           : 'Buku_Kas_SMKS_PGRI_1'
                       )
                     }
@@ -3297,11 +3400,24 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Filter Toolbar */}
+              {/* Filter Toolbar & Mode Laporan */}
               <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex flex-wrap items-center justify-between gap-4">
-                  {/* Tab Rekap Harian vs Buku Kas */}
-                  <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-950">
+                  {/* Tab Pilihan: Laporan Bulanan | Rekap Harian | Buku Kas */}
+                  <div className="flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 p-1 dark:bg-slate-950">
+                    <button
+                      onClick={() => {
+                        setReportTab('monthly');
+                        setReportPage(1);
+                      }}
+                      className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                        reportTab === 'monthly'
+                          ? 'bg-blue-700 text-white shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
+                      }`}
+                    >
+                      Laporan Bulanan ({selectedMonthLabel})
+                    </button>
                     <button
                       onClick={() => {
                         setReportTab('daily');
@@ -3309,7 +3425,7 @@ export default function App() {
                       }}
                       className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                         reportTab === 'daily'
-                          ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                          ? 'bg-blue-700 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
                       }`}
                     >
@@ -3322,7 +3438,7 @@ export default function App() {
                       }}
                       className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                         reportTab === 'cashbook'
-                          ? 'bg-white text-slate-900 shadow-xs dark:bg-slate-800 dark:text-white'
+                          ? 'bg-blue-700 text-white shadow-xs'
                           : 'text-slate-600 hover:text-slate-900 dark:text-slate-400'
                       }`}
                     >
@@ -3330,8 +3446,89 @@ export default function App() {
                     </button>
                   </div>
 
-                  {/* Filter Rentang Tanggal, Pos, dan Search */}
+                  {/* Filter Bulan / Rentang Tanggal, Pos, dan Search */}
                   <div className="flex flex-wrap items-center gap-2.5">
+                    {reportTab === 'monthly' && (
+                      <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs dark:border-slate-800 dark:bg-slate-950">
+                        <Calendar className="h-3.5 w-3.5 text-blue-600" />
+                        <span className="font-semibold text-slate-600 dark:text-slate-300">
+                          Pilih Bulan:
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => shiftSelectedMonth(-1)}
+                          className="rounded border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                          title="Bulan Sebelumnya"
+                        >
+                          <ChevronLeft className="h-3.5 w-3.5" />
+                        </button>
+                        <select
+                          value={selectedReportMonth.split('-')[1] || '01'}
+                          onChange={(e) => {
+                            const year =
+                              selectedReportMonth.split('-')[0] ||
+                              String(new Date().getFullYear());
+                            setSelectedReportMonth(`${year}-${e.target.value}`);
+                            setReportPage(1);
+                          }}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
+                          <option value="01">01 - Januari</option>
+                          <option value="02">02 - Februari</option>
+                          <option value="03">03 - Maret</option>
+                          <option value="04">04 - April</option>
+                          <option value="05">05 - Mei</option>
+                          <option value="06">06 - Juni</option>
+                          <option value="07">07 - Juli</option>
+                          <option value="08">08 - Agustus</option>
+                          <option value="09">09 - September</option>
+                          <option value="10">10 - Oktober</option>
+                          <option value="11">11 - November</option>
+                          <option value="12">12 - Desember</option>
+                        </select>
+                        <select
+                          value={
+                            selectedReportMonth.split('-')[0] ||
+                            String(new Date().getFullYear())
+                          }
+                          onChange={(e) => {
+                            const month = selectedReportMonth.split('-')[1] || '01';
+                            setSelectedReportMonth(`${e.target.value}-${month}`);
+                            setReportPage(1);
+                          }}
+                          className="rounded border border-slate-300 bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                        >
+                          {['2024', '2025', '2026', '2027', '2028', '2029', '2030'].map(
+                            (yr) => (
+                              <option key={yr} value={yr}>
+                                {yr}
+                              </option>
+                            )
+                          )}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => shiftSelectedMonth(1)}
+                          className="rounded border border-slate-300 bg-white p-1 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                          title="Bulan Berikutnya"
+                        >
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        </button>
+                        {selectedReportMonth !== currentMonthStr && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedReportMonth(currentMonthStr);
+                              setReportPage(1);
+                            }}
+                            className="ml-1 rounded bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-300"
+                          >
+                            Bulan Ini
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {reportTab === 'cashbook' && (
                       <div className="flex items-center gap-1.5 text-xs">
                         <Calendar className="h-3.5 w-3.5 text-slate-400" />
@@ -3368,8 +3565,8 @@ export default function App() {
                       <option value="ALL">Semua Pos Pembayaran</option>
                       <option value="SPP">Pos SPP</option>
                       <option value="DSP">Pos DSP</option>
-                      <option value="Pembiayaan Kelas XII">Pembiayaan Kelas XII</option>
                       <option value="Pembiayaan Kelas XI">Pembiayaan Kelas XI</option>
+                      <option value="Pembiayaan Kelas XII">Pembiayaan Kelas XII</option>
                     </select>
 
                     <div className="relative">
@@ -3388,7 +3585,188 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Tabel Data Buku Kas */}
+                {/* =============================================================
+                    REKAPITULASI TOTAL PER KATEGORI (SPP, DSP, KLS XI, KLS XII)
+                ============================================================= */}
+                <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-950/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3">
+                    <div>
+                      <h2 className="font-display text-xs font-bold tracking-wider text-slate-700 uppercase dark:text-slate-200">
+                        {reportTab === 'monthly'
+                          ? `Rekapitulasi Penerimaan Bulanan Per Kategori — ${selectedMonthLabel}`
+                          : reportTab === 'daily'
+                          ? `Rekapitulasi Penerimaan Harian Per Kategori — ${todayStr}`
+                          : `Rekapitulasi Penerimaan Periode ${dateStart} s/d ${dateEnd}`}
+                      </h2>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Klik pada salah satu kartu kategori di bawah untuk memfilter tabel transaksi
+                        khusus kategori tersebut.
+                      </p>
+                    </div>
+                    {reportCategoryFilter !== 'ALL' && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setReportCategoryFilter('ALL');
+                          setReportPage(1);
+                        }}
+                        className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                      >
+                        Tampilkan Semua Kategori
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    {/* 1. Rekap Kategori SPP */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportCategoryFilter(
+                          reportCategoryFilter === 'SPP' ? 'ALL' : 'SPP'
+                        );
+                        setReportPage(1);
+                      }}
+                      className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all ${
+                        reportCategoryFilter === 'SPP'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-blue-950/40'
+                          : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                          1. Pos SPP
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {reportCategoryRecap.sppPct}%
+                        </span>
+                      </div>
+                      <p className="mt-2 font-mono text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                        {formatRupiah(reportCategoryRecap.sppTotal)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {reportCategoryRecap.sppCount} transaksi pembayaran SPP
+                      </p>
+                    </button>
+
+                    {/* 2. Rekap Kategori DSP */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportCategoryFilter(
+                          reportCategoryFilter === 'DSP' ? 'ALL' : 'DSP'
+                        );
+                        setReportPage(1);
+                      }}
+                      className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all ${
+                        reportCategoryFilter === 'DSP'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-blue-950/40'
+                          : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                          2. Pos DSP
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {reportCategoryRecap.dspPct}%
+                        </span>
+                      </div>
+                      <p className="mt-2 font-mono text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                        {formatRupiah(reportCategoryRecap.dspTotal)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {reportCategoryRecap.dspCount} transaksi cicilan DSP
+                      </p>
+                    </button>
+
+                    {/* 3. Rekap Kategori Kls XI */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportCategoryFilter(
+                          reportCategoryFilter === 'Pembiayaan Kelas XI'
+                            ? 'ALL'
+                            : 'Pembiayaan Kelas XI'
+                        );
+                        setReportPage(1);
+                      }}
+                      className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all ${
+                        reportCategoryFilter === 'Pembiayaan Kelas XI'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-blue-950/40'
+                          : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                          3. Pembiayaan Kls XI
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {reportCategoryRecap.class11Pct}%
+                        </span>
+                      </div>
+                      <p className="mt-2 font-mono text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                        {formatRupiah(reportCategoryRecap.class11Total)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {reportCategoryRecap.class11Count} transaksi Kelas XI
+                      </p>
+                    </button>
+
+                    {/* 4. Rekap Kategori Kls XII */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportCategoryFilter(
+                          reportCategoryFilter === 'Pembiayaan Kelas XII'
+                            ? 'ALL'
+                            : 'Pembiayaan Kelas XII'
+                        );
+                        setReportPage(1);
+                      }}
+                      className={`flex flex-col justify-between rounded-xl border p-3.5 text-left transition-all ${
+                        reportCategoryFilter === 'Pembiayaan Kelas XII'
+                          ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-500/20 dark:border-blue-500 dark:bg-blue-950/40'
+                          : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-600 dark:text-slate-300">
+                          4. Pembiayaan Kls XII
+                        </span>
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          {reportCategoryRecap.class12Pct}%
+                        </span>
+                      </div>
+                      <p className="mt-2 font-mono text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                        {formatRupiah(reportCategoryRecap.class12Total)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        {reportCategoryRecap.class12Count} transaksi Kelas XII
+                      </p>
+                    </button>
+
+                    {/* 5. Total Keseluruhan Periode / Bulan */}
+                    <div className="flex flex-col justify-between rounded-xl border border-emerald-300 bg-emerald-50/70 p-3.5 dark:border-emerald-900/70 dark:bg-emerald-950/40">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                          Total Penerimaan
+                        </span>
+                        <span className="rounded bg-emerald-600 px-1.5 py-0.5 font-mono text-[11px] font-bold text-white">
+                          100%
+                        </span>
+                      </div>
+                      <p className="mt-2 font-mono text-base font-bold tabular-nums text-emerald-800 dark:text-emerald-300">
+                        {formatRupiah(reportCategoryRecap.grandTotal)}
+                      </p>
+                      <p className="mt-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                        Total {reportCategoryRecap.txCount} kuitansi sah
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabel Data Laporan (Kolom SPP, DSP, Kls XI, Kls XII Terpisah) */}
                 <div className="mt-4 overflow-x-auto">
                   <table className="w-full border-collapse text-left text-xs">
                     <thead>
@@ -3399,9 +3777,8 @@ export default function App() {
                         <th className="px-3 py-2.5 font-semibold">Pos / Rincian</th>
                         <th className="px-3 py-2.5 text-right font-semibold">SPP</th>
                         <th className="px-3 py-2.5 text-right font-semibold">DSP</th>
-                        <th className="px-3 py-2.5 text-right font-semibold">
-                          Kls XI/XII
-                        </th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Kls XI</th>
+                        <th className="px-3 py-2.5 text-right font-semibold">Kls XII</th>
                         <th className="px-3 py-2.5 text-right font-semibold">
                           Total Masuk
                         </th>
@@ -3412,10 +3789,10 @@ export default function App() {
                       {paginatedReportTransactions.length === 0 ? (
                         <tr>
                           <td
-                            colSpan={9}
+                            colSpan={10}
                             className="py-10 text-center text-xs text-slate-500"
                           >
-                            Tidak ada transaksi pada filter laporan ini.
+                            Tidak ada transaksi pada periode / filter laporan ini.
                           </td>
                         </tr>
                       ) : (
@@ -3449,7 +3826,10 @@ export default function App() {
                               {formatRupiah(tx.dspAmount)}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                              {formatRupiah(tx.class11Amount + tx.class12Amount)}
+                              {formatRupiah(tx.class11Amount)}
+                            </td>
+                            <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                              {formatRupiah(tx.class12Amount)}
                             </td>
                             <td className="px-3 py-2.5 text-right font-mono font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
                               {formatRupiah(tx.totalAmount)}
@@ -3462,7 +3842,8 @@ export default function App() {
                     <tfoot>
                       <tr className="border-t-2 border-slate-300 bg-slate-50 font-bold dark:border-slate-700 dark:bg-slate-950">
                         <td colSpan={4} className="py-3 pr-3">
-                          TOTAL PERIODE ({filteredReportTransactions.length} Transaksi)
+                          REKAPITULASI TOTAL ({filteredReportTransactions.length}{' '}
+                          Transaksi)
                         </td>
                         <td className="px-3 py-3 text-right font-mono tabular-nums">
                           {formatRupiah(
@@ -3477,7 +3858,15 @@ export default function App() {
                         <td className="px-3 py-3 text-right font-mono tabular-nums">
                           {formatRupiah(
                             filteredReportTransactions.reduce(
-                              (s, t) => s + t.class11Amount + t.class12Amount,
+                              (s, t) => s + t.class11Amount,
+                              0
+                            )
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-right font-mono tabular-nums">
+                          {formatRupiah(
+                            filteredReportTransactions.reduce(
+                              (s, t) => s + t.class12Amount,
                               0
                             )
                           )}
