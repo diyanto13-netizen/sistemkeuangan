@@ -262,8 +262,10 @@ export default function App() {
     }, 4500);
   };
 
-  // Master Data Siswa Form & Edit State
+  // Master Data Siswa Form, Edit & Multi-Select Delete State
   const [studentSearch, setStudentSearch] = useState<string>('');
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
+  const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState<boolean>(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [nisForm, setNisForm] = useState<string>('');
   const [nameForm, setNameForm] = useState<string>('');
@@ -1265,11 +1267,80 @@ export default function App() {
       const nextStudents = students.filter((s) => s.id !== st.id);
       setStudents(nextStudents);
       saveStudentsCache(nextStudents);
+      setSelectedStudentIds((prev) => prev.filter((id) => id !== st.id));
       await deleteDoc(doc(db, 'students', st.id));
       showToast(`Data siswa ${st.name} telah dihapus.`, 'info');
       if (editingStudent?.id === st.id) resetStudentForm();
     } catch (error) {
       console.warn('Firestore student delete fallback to local cache:', error);
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  // Toggle ceklis satu siswa pada tabel Master Data Siswa
+  const toggleSelectStudent = (studentId: string) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(studentId)
+        ? prev.filter((id) => id !== studentId)
+        : [...prev, studentId]
+    );
+  };
+
+  // Toggle ceklis semua siswa yang tampil pada hasil pencarian Master Data Siswa
+  const toggleSelectAllFilteredStudents = (visibleList: Student[]) => {
+    if (visibleList.length === 0) return;
+    const visibleIds = visibleList.map((s) => s.id);
+    const allVisibleSelected = visibleIds.every((id) =>
+      selectedStudentIds.includes(id)
+    );
+    if (allVisibleSelected) {
+      const visibleSet = new Set(visibleIds);
+      setSelectedStudentIds((prev) => prev.filter((id) => !visibleSet.has(id)));
+    } else {
+      setSelectedStudentIds((prev) => Array.from(new Set([...prev, ...visibleIds])));
+    }
+  };
+
+  // Eksekusi hapus massal untuk seluruh data siswa yang ditandai ceklis
+  const handleBulkDeleteSelectedStudents = async () => {
+    if (!currentUser || !isKasir || selectedStudentIds.length === 0) return;
+    const idsToDelete = [...selectedStudentIds];
+    const deleteSet = new Set(idsToDelete);
+    const count = idsToDelete.length;
+
+    setBusyAction(`Menghapus ${count} data siswa yang ditandai ceklis...`);
+    try {
+      const nextStudents = students.filter((s) => !deleteSet.has(s.id));
+      setStudents(nextStudents);
+      saveStudentsCache(nextStudents);
+      setSelectedStudentIds([]);
+      setConfirmBulkDeleteOpen(false);
+
+      if (editingStudent && deleteSet.has(editingStudent.id)) {
+        resetStudentForm();
+      }
+
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < idsToDelete.length; i += CHUNK_SIZE) {
+        const chunk = idsToDelete.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((studentId) => {
+          batch.delete(doc(db, 'students', studentId));
+        });
+        await batch.commit();
+      }
+
+      showToast(
+        `Berhasil menghapus ${count} data siswa yang ditandai ceklis!`,
+        'success'
+      );
+    } catch (error) {
+      console.warn('Firestore bulk student delete fallback to local cache:', error);
+      showToast(
+        `Berhasil menghapus ${count} data siswa yang ditandai ceklis.`,
+        'info'
+      );
     } finally {
       setBusyAction(null);
     }
@@ -3796,12 +3867,29 @@ export default function App() {
                   </form>
                 </div>
 
-                {/* Tabel Master Siswa & Pencarian */}
+                {/* Tabel Master Siswa, Pencarian & Hapus Massal Ceklis */}
                 <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900 lg:col-span-7">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                      Daftar Siswa Terdaftar ({filteredMasterStudents.length})
-                    </h2>
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                        Daftar Siswa Terdaftar ({filteredMasterStudents.length})
+                      </h2>
+                      {filteredMasterStudents.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            toggleSelectAllFilteredStudents(filteredMasterStudents)
+                          }
+                          className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                        >
+                          {filteredMasterStudents.every((s) =>
+                            selectedStudentIds.includes(s.id)
+                          )
+                            ? 'Batal Pilih Semua'
+                            : 'Pilih Semua'}
+                        </button>
+                      )}
+                    </div>
                     <div className="relative w-full sm:w-64">
                       <Search className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
                       <input
@@ -3814,10 +3902,55 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Bar Aksi Cepat Hapus Siswa yang Ditandai Ceklis */}
+                  {selectedStudentIds.length > 0 && (
+                    <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-red-200 bg-red-50/80 px-3.5 py-2.5 text-xs dark:border-red-900/60 dark:bg-red-950/40">
+                      <div className="flex items-center gap-2 text-red-900 dark:text-red-200">
+                        <CheckCircle2 className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" />
+                        <span>
+                          <strong>{selectedStudentIds.length} siswa</strong> ditandai ceklis
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedStudentIds([])}
+                          className="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                        >
+                          Batal Ceklis
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmBulkDeleteOpen(true)}
+                          className="flex items-center gap-1.5 rounded-md bg-red-600 px-3 py-1 text-xs font-semibold text-white hover:bg-red-700"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          <span>Hapus Siswa Terpilih ({selectedStudentIds.length})</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="mt-4 overflow-x-auto">
                     <table className="w-full border-collapse text-left text-xs">
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <th className="w-8 py-2.5 pr-2">
+                            <input
+                              type="checkbox"
+                              checked={
+                                filteredMasterStudents.length > 0 &&
+                                filteredMasterStudents.every((s) =>
+                                  selectedStudentIds.includes(s.id)
+                                )
+                              }
+                              onChange={() =>
+                                toggleSelectAllFilteredStudents(filteredMasterStudents)
+                              }
+                              aria-label="Pilih semua siswa"
+                              className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+                            />
+                          </th>
                           <th className="py-2.5 pr-3 font-semibold">NIS</th>
                           <th className="px-3 py-2.5 font-semibold">Nama Siswa</th>
                           <th className="px-3 py-2.5 font-semibold">Kelas</th>
@@ -3833,61 +3966,77 @@ export default function App() {
                         {filteredMasterStudents.length === 0 ? (
                           <tr>
                             <td
-                              colSpan={7}
+                              colSpan={8}
                               className="py-10 text-center text-xs text-slate-500"
                             >
                               Tidak ada data siswa yang cocok.
                             </td>
                           </tr>
                         ) : (
-                          filteredMasterStudents.map((st) => (
-                            <tr
-                              key={st.id}
-                              className="hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                            >
-                              <td className="py-2.5 pr-3 font-mono font-semibold">
-                                {st.nis}
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <p className="font-semibold text-slate-900 dark:text-slate-100">
-                                  {st.name}
-                                </p>
-                                <p className="text-[11px] text-slate-500">
-                                  WA: {st.waNumber}
-                                </p>
-                              </td>
-                              <td className="px-3 py-2.5">{st.className}</td>
-                              <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                                {formatRupiah(st.sppBalance)}
-                              </td>
-                              <td className="px-3 py-2.5 text-right font-mono tabular-nums">
-                                {formatRupiah(st.dspBalance)}
-                              </td>
-                              <td className="px-3 py-2.5 text-right font-mono font-bold tabular-nums">
-                                {formatRupiah(st.totalBalance)}
-                              </td>
-                              <td className="py-2.5 pl-3 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSelectEditStudent(st)}
-                                    className="rounded border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
-                                    title="Edit Biodata & Saldo"
-                                  >
-                                    <Edit3 className="h-3.5 w-3.5" />
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDeleteStudent(st)}
-                                    className="rounded border border-slate-200 p-1.5 text-red-600 hover:bg-red-50 dark:border-slate-700"
-                                    title="Hapus Siswa"
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                          filteredMasterStudents.map((st) => {
+                            const isChecked = selectedStudentIds.includes(st.id);
+                            return (
+                              <tr
+                                key={st.id}
+                                className={`transition-colors ${
+                                  isChecked
+                                    ? 'bg-blue-50/70 dark:bg-blue-950/30'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                                }`}
+                              >
+                                <td className="py-2.5 pr-2">
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={() => toggleSelectStudent(st.id)}
+                                    aria-label={`Pilih siswa ${st.name}`}
+                                    className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-slate-700"
+                                  />
+                                </td>
+                                <td className="py-2.5 pr-3 font-mono font-semibold">
+                                  {st.nis}
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                    {st.name}
+                                  </p>
+                                  <p className="text-[11px] text-slate-500">
+                                    WA: {st.waNumber}
+                                  </p>
+                                </td>
+                                <td className="px-3 py-2.5">{st.className}</td>
+                                <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                                  {formatRupiah(st.sppBalance)}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono tabular-nums">
+                                  {formatRupiah(st.dspBalance)}
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-mono font-bold tabular-nums">
+                                  {formatRupiah(st.totalBalance)}
+                                </td>
+                                <td className="py-2.5 pl-3 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSelectEditStudent(st)}
+                                      className="rounded border border-slate-200 p-1.5 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+                                      title="Edit Biodata & Saldo"
+                                    >
+                                      <Edit3 className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteStudent(st)}
+                                      className="rounded border border-slate-200 p-1.5 text-red-600 hover:bg-red-50 dark:border-slate-700"
+                                      title="Hapus Siswa"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -4847,6 +4996,58 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Modal Konfirmasi Hapus Massal Siswa yang Ditandai Ceklis */}
+      {confirmBulkDeleteOpen && selectedStudentIds.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-6 shadow-xl dark:border-slate-800 dark:bg-slate-900">
+            <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+              Konfirmasi Hapus Data Siswa Terpilih
+            </h3>
+            <p className="mt-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              Apakah Anda yakin ingin menghapus{' '}
+              <span className="font-bold text-red-600 dark:text-red-400">
+                {selectedStudentIds.length} data siswa
+              </span>{' '}
+              yang telah ditandai ceklis dari Master Data Siswa & Cloud Firestore?
+            </p>
+            <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs dark:border-slate-800 dark:bg-slate-950">
+              <ul className="space-y-1">
+                {students
+                  .filter((s) => selectedStudentIds.includes(s.id))
+                  .map((s) => (
+                    <li
+                      key={s.id}
+                      className="flex items-center justify-between gap-2 font-medium text-slate-700 dark:text-slate-300"
+                    >
+                      <span className="truncate">{s.name}</span>
+                      <span className="font-mono text-[11px] text-slate-500">
+                        {s.nis} · {s.className}
+                      </span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmBulkDeleteOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDeleteSelectedStudents}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Ya, Hapus {selectedStudentIds.length} Siswa</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Konfirmasi Pembatalan (Void) dengan Firestore Transaction */}
       {confirmVoidTx && (
