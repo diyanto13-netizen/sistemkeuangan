@@ -3413,9 +3413,11 @@ export default function App() {
                             }}
                             className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                           >
+                            <option value="2024/2025">2024/2025</option>
                             <option value="2025/2026">2025/2026</option>
                             <option value="2026/2027">2026/2027</option>
                             <option value="2027/2028">2027/2028</option>
+                            <option value="2028/2029">2028/2029</option>
                           </select>
                         </div>
                       ) : (
@@ -3455,7 +3457,8 @@ export default function App() {
                             const isAlreadyPaid = selectedPosStudent?.paidMonths.some(
                               (pm) =>
                                 pm.toLowerCase() === fullLabel.toLowerCase() ||
-                                pm.toLowerCase().startsWith(m.name.toLowerCase())
+                                (!pm.includes('/') &&
+                                  pm.toLowerCase().startsWith(m.name.toLowerCase()))
                             );
                             const isChecked = posSelectedMonths.includes(fullLabel);
 
@@ -4843,9 +4846,11 @@ export default function App() {
                         onChange={(e) => setSppCardYear(e.target.value)}
                         className="mt-1 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       >
+                        <option value="2024/2025">2024/2025</option>
                         <option value="2025/2026">2025/2026</option>
                         <option value="2026/2027">2026/2027</option>
                         <option value="2027/2028">2027/2028</option>
+                        <option value="2028/2029">2028/2029</option>
                       </select>
                     </div>
                   </div>
@@ -4887,12 +4892,16 @@ export default function App() {
                 {selectedHistoryStudent && (
                   <div className="mt-4">
                     <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                      Status Kartu SPP {selectedHistoryStudent.name} ({selectedHistoryStudent.className}) — Juli s/d Juni:
+                      Status Kartu SPP {selectedHistoryStudent.name} ({selectedHistoryStudent.className}) — Juli s/d Juni ({sppCardYear}):
                     </p>
                     <div className="mt-2.5 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
                       {ACADEMIC_MONTHS.map((m) => {
-                        const isPaid = selectedHistoryStudent.paidMonths.some((pm) =>
-                          pm.toLowerCase().includes(m.name.toLowerCase())
+                        const fullCardLabel = `${m.name} ${sppCardYear}`;
+                        const isPaid = selectedHistoryStudent.paidMonths.some(
+                          (pm) =>
+                            pm.toLowerCase() === fullCardLabel.toLowerCase() ||
+                            (!pm.includes('/') &&
+                              pm.toLowerCase().includes(m.name.toLowerCase()))
                         );
                         return (
                           <div
