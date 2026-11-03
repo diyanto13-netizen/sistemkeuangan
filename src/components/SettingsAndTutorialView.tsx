@@ -4,6 +4,7 @@ import {
   BookOpen,
   Building2,
   CheckCircle2,
+  CreditCard,
   Eye,
   EyeOff,
   FileSpreadsheet,
@@ -12,6 +13,7 @@ import {
   Image as ImageIcon,
   KeyRound,
   LayoutDashboard,
+  MessageSquare,
   Palette,
   RotateCcw,
   Save,
@@ -174,6 +176,11 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
         principalEmail:
           formState.principalEmail.trim().slice(0, 120) || DEFAULT_SCHOOL_SETTINGS.principalEmail,
         principalPasswordHint: formState.principalPasswordHint.trim().slice(0, 60),
+        treasurerName:
+          (formState.treasurerName || DEFAULT_SCHOOL_SETTINGS.treasurerName || 'Esih Sukaesih')
+            .trim()
+            .slice(0, 100),
+        treasurerNip: (formState.treasurerNip || '').trim().slice(0, 50),
       });
     } finally {
       setSaving(false);
@@ -297,7 +304,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
         'Tab Rekap Harian: Menampilkan seluruh transaksi yang terjadi tepat pada tanggal hari ini.',
         'Tab Buku Kas (Rentang Tanggal): Pilih tanggal mulai dan tanggal akhir serta filter Pos Pembayaran (Semua Pos, SPP, DSP, Kelas XI, Kelas XII).',
         'Pencarian & Paginasi: Gunakan kolom pencarian instan untuk memfilter nomor kuitansi atau nama siswa.',
-        'Ekspor PDF Berkolom Tanda Tangan Resmi & Excel (.xls): Klik "Ekspor PDF (Tanda Tangan Resmi)" untuk mengunduh laporan A4 Landscape lengkap dengan Kop Sekolah, Logo, serta nama & NIP Kepala Sekolah dan Bendahara, atau klik "Unduh Excel (.xls)" untuk pengolahan di Microsoft Excel.',
+        'Ekspor PDF Berkolom Tanda Tangan Resmi & Excel (.xls): Klik "Ekspor PDF (Tanda Tangan Resmi)" untuk mengunduh laporan A4 Landscape lengkap dengan Kop Sekolah, Logo, rekapitulasi total per kategori, serta 3 kolom tanda tangan pengesahan resmi: Kepala Sekolah, Bendahara Umum (Esih Sukaesih), dan Kasir / Bendahara Penerima, atau klik "Unduh Excel (.xls)" untuk pengolahan di Microsoft Excel.',
       ],
     },
     {
@@ -310,7 +317,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
       steps: [
         'Filter Pintar: Tabel ini secara otomatis hanya menampilkan siswa yang masih memiliki total saldo tunggakan > Rp 0.',
         'Filter Kelas & Tingkat: Saring daftar penunggak berdasarkan Tingkat (X, XI, XII) atau Rombongan Belajar spesifik.',
-        'Kirim Pesan WA Penagihan: Klik tombol "Kirim Pesan WA" pada baris siswa untuk membuka WhatsApp (wa.me) ke nomor wali murid yang sudah terisi otomatis dengan rincian tunggakan per pos, total hutang, dan instruksi pembayaran resmi sekolah.',
+        'Kirim Pesan WA Penagihan: Klik tombol "Kirim Pesan WA" pada baris siswa untuk membuka WhatsApp (wa.me) ke nomor wali murid yang sudah terisi otomatis dengan rincian tunggakan per pos, total hutang, serta instruksi pembayaran transfer resmi sekolah (Bank BRI No. Rekening: 0092-0101-11495-39 a.n SMK PGRI 1) dan pembayaran tunai di Loket Kasir.',
       ],
     },
     {
@@ -379,7 +386,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
             }`}
           >
             <UserCheck className="h-3.5 w-3.5" />
-            <span>3. Identitas Kasir & Kepsek</span>
+            <span>3. Identitas Kasir, Bendahara & Kepsek</span>
           </button>
 
           <button
@@ -512,6 +519,58 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
               </div>
             </div>
 
+            {/* Rekening Bank Resmi Sekolah untuk Pembayaran Transfer & Penagihan WA */}
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 dark:border-emerald-900/60 dark:bg-emerald-950/20">
+              <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300">
+                <CreditCard className="h-4 w-4" />
+                <span className="text-xs font-bold">
+                  Rekening Bank Resmi Sekolah (Tujuan Transfer & WhatsApp Penagihan)
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-emerald-700 dark:text-emerald-400">
+                Data nomor rekening ini otomatis disertakan dalam format pesan penagihan WhatsApp ke orang tua / wali murid untuk metode pembayaran non-tunai.
+              </p>
+
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Nama Bank
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.bankName || 'Bank BRI'}
+                    onChange={(e) => handleFieldChange('bankName', e.target.value)}
+                    placeholder="Contoh: Bank BRI"
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Nomor Rekening
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.bankAccountNo || '0092-0101-11495-39'}
+                    onChange={(e) => handleFieldChange('bankAccountNo', e.target.value)}
+                    placeholder="Contoh: 0092-0101-11495-39"
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-mono font-bold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-medium text-slate-700 dark:text-slate-300">
+                    Atas Nama Rekening (a.n)
+                  </label>
+                  <input
+                    type="text"
+                    value={formState.bankAccountHolder || 'SMK PGRI 1'}
+                    onChange={(e) => handleFieldChange('bankAccountHolder', e.target.value)}
+                    placeholder="Contoh: SMK PGRI 1"
+                    className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus:border-emerald-600 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center justify-end gap-2 pt-2">
               <button
                 type="submit"
@@ -568,29 +627,54 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
                   </div>
                 </div>
 
-                {/* Simulasi Tanda Tangan Pejabat */}
-                <div className="mt-6 grid grid-cols-2 gap-4 pt-2 text-[11px] text-slate-800">
+                {/* Simulasi Tanda Tangan Pejabat (Laporan Rekap & Buku Kas) */}
+                <div className="mt-6 grid grid-cols-3 gap-2 pt-2 text-[10px] text-slate-800">
                   <div>
-                    <p>Mengetahui,</p>
-                    <p>Kepala {formState.schoolName}</p>
-                    <p className="mt-10 font-bold underline">
+                    <p className="font-medium text-slate-500">Mengetahui,</p>
+                    <p className="font-semibold text-slate-800">Kepala Sekolah</p>
+                    <p className="mt-8 font-bold underline">
                       ({formState.principalName})
                     </p>
-                    <p className="text-[10px] text-slate-600">
-                      {formState.principalNip}
+                    <p className="text-[9px] text-slate-500">
+                      {formState.principalNip || '-'}
+                    </p>
+                  </div>
+                  <div className="text-center">
+                    <p className="font-medium text-slate-500">Menyetujui,</p>
+                    <p className="font-semibold text-slate-800">Bendahara Umum</p>
+                    <p className="mt-8 font-bold underline">
+                      ({formState.treasurerName || 'Esih Sukaesih'})
+                    </p>
+                    <p className="text-[9px] text-slate-500">
+                      {formState.treasurerNip || '-'}
                     </p>
                   </div>
                   <div className="text-right">
-                    <p>
+                    <p className="font-medium text-slate-500">
                       {formState.schoolCity}, {new Date().toISOString().slice(0, 10)}
                     </p>
-                    <p>Bendahara / Kasir Penerima,</p>
-                    <p className="mt-10 font-bold underline">
+                    <p className="font-semibold text-slate-800">Kasir Penerima</p>
+                    <p className="mt-8 font-bold underline">
                       ({formState.cashierName})
                     </p>
-                    <p className="text-[10px] text-slate-600">
-                      {formState.cashierNip}
+                    <p className="text-[9px] text-slate-500">
+                      {formState.cashierNip || '-'}
                     </p>
+                  </div>
+                </div>
+
+                {/* Rekening Tujuan Transfer Bank (Format WA Penagihan) */}
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-1 rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-[10px] text-slate-700">
+                  <div className="flex items-center gap-1.5 font-medium">
+                    <span className="inline-block h-2 w-2 rounded-full bg-emerald-500"></span>
+                    <span>Tujuan Transfer Resmi (Format WA):</span>
+                  </div>
+                  <div className="font-semibold text-slate-900">
+                    <span className="text-blue-700">{formState.bankName || 'Bank BRI'}</span> • No. Rek:{' '}
+                    <span className="font-mono font-bold text-slate-950">
+                      {formState.bankAccountNo || '0092-0101-11495-39'}
+                    </span>{' '}
+                    • a.n <span className="font-bold">{formState.bankAccountHolder || 'SMK PGRI 1'}</span>
                   </div>
                 </div>
               </div>
@@ -735,25 +819,25 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
         >
           <div className="border-b border-slate-200 pb-3 dark:border-slate-800">
             <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-              Pengaturan Nama Identitas & NIP Kasir serta Kepala Sekolah
+              Pengaturan Nama Identitas & NIP Kasir, Bendahara Umum, serta Kepala Sekolah
             </h2>
             <p className="text-xs text-slate-500 dark:text-slate-400">
               Digunakan secara otomatis sebagai nama petugas kasir aktif dan pejabat
-              penandatangan resmi pada Kuitansi PDF, Kartu SPP, dan Laporan Buku Kas.
+              penandatangan resmi pada Kuitansi PDF, Kartu SPP, Laporan Rekap Harian, dan Buku Kas.
             </p>
           </div>
 
-          <div className="mt-5 grid grid-cols-1 gap-6 md:grid-cols-2">
-            {/* Identitas Kasir / Bendahara */}
+          <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
+            {/* 1. Identitas Kasir / Bendahara Penerima */}
             <div className="space-y-3.5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
               <div className="flex items-center gap-2 text-xs font-bold text-blue-700 dark:text-blue-400">
                 <UserCheck className="h-4 w-4" />
-                <span>Identitas Kasir / Bendahara Penerima</span>
+                <span>1. Kasir / Bendahara Penerima</span>
               </div>
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  Nama Lengkap & Gelar Kasir / Bendahara
+                  Nama Lengkap & Gelar Kasir
                 </label>
                 <input
                   type="text"
@@ -767,7 +851,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
 
               <div>
                 <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
-                  NIP / NUPTK / NIY Kasir (Tampil di bawah tanda tangan)
+                  NIP / NUPTK / NIY Kasir
                 </label>
                 <input
                   type="text"
@@ -779,11 +863,46 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
               </div>
             </div>
 
-            {/* Identitas Kepala Sekolah */}
+            {/* 2. Identitas Bendahara Umum (Penandatangan Rekap Harian & Laporan Keuangan) */}
+            <div className="space-y-3.5 rounded-xl border border-amber-200 bg-amber-50/40 p-4 dark:border-amber-900/40 dark:bg-amber-950/20">
+              <div className="flex items-center gap-2 text-xs font-bold text-amber-800 dark:text-amber-400">
+                <Wallet className="h-4 w-4" />
+                <span>2. Bendahara Umum (Rekap Harian)</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Nama Lengkap Bendahara Umum
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formState.treasurerName || 'Esih Sukaesih'}
+                  onChange={(e) => handleFieldChange('treasurerName', e.target.value)}
+                  placeholder="Contoh: Esih Sukaesih"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
+                  NIP / NUPTK Bendahara Umum (Opsional)
+                </label>
+                <input
+                  type="text"
+                  value={formState.treasurerNip || ''}
+                  onChange={(e) => handleFieldChange('treasurerNip', e.target.value)}
+                  placeholder="Contoh: NIP/NUPTK. -"
+                  className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 font-mono text-xs text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                />
+              </div>
+            </div>
+
+            {/* 3. Identitas Kepala Sekolah */}
             <div className="space-y-3.5 rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
               <div className="flex items-center gap-2 text-xs font-bold text-emerald-700 dark:text-emerald-400">
                 <ShieldCheck className="h-4 w-4" />
-                <span>Identitas Kepala Sekolah (Eksekutif Penandatangan)</span>
+                <span>3. Kepala Sekolah (Eksekutif)</span>
               </div>
 
               <div>
@@ -825,7 +944,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
               <span>
                 {saving
                   ? 'Menyimpan Identitas...'
-                  : 'Simpan Identitas Kasir & Kepala Sekolah'}
+                  : 'Simpan Identitas Pejabat ke Cloud'}
               </span>
             </button>
           </div>

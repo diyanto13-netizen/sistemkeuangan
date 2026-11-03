@@ -1101,50 +1101,95 @@ export function generateCashbookPDF(
   const finalY =
     (doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable
       ?.finalY || 140;
-  const signY = Math.min(finalY + 10, 166);
-  const leftCenterX = 65;
-  const rightCenterX = 232;
+
+  // Pastikan ruang tanda tangan tidak terpotong ke margin bawah (Landscape A4: tinggi 210mm)
+  let signY = finalY + 9;
+  if (signY > 160) {
+    doc.addPage();
+    signY = 32;
+  }
+
+  const col1CenterX = 56;
+  const col2CenterX = 148.5;
+  const col3CenterX = 241;
   const todayIso = new Date().toISOString().slice(0, 10);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
+  doc.setFontSize(9);
   doc.setTextColor(15, 23, 42);
 
-  doc.text('Mengetahui,', leftCenterX, signY, { align: 'center' });
-  doc.text(`Kepala ${settings.schoolName},`, leftCenterX, signY + 5, {
+  // 1. Kolom Kiri: Mengetahui, Kepala Sekolah
+  doc.text('Mengetahui,', col1CenterX, signY, { align: 'center' });
+  doc.text(`Kepala ${settings.schoolName},`, col1CenterX, signY + 4.5, {
     align: 'center',
   });
   doc.setFont('helvetica', 'bold');
-  doc.text(`( ${settings.principalName} )`, leftCenterX, signY + 24, {
+  doc.text(`( ${settings.principalName} )`, col1CenterX, signY + 23.5, {
     align: 'center',
   });
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.25);
+  doc.line(col1CenterX - 28, signY + 24.5, col1CenterX + 28, signY + 24.5);
   const principalNipLine = formatNipLine(settings.principalNip);
   if (principalNipLine) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.text(principalNipLine, leftCenterX, signY + 28.5, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(principalNipLine, col1CenterX, signY + 28.5, { align: 'center' });
   }
 
+  // 2. Kolom Tengah: Menyetujui, Bendahara Umum (Esih Sukaesih)
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9.5);
-  doc.text(
-    `${settings.schoolCity || 'Sukabumi'}, ${formatTanggalResmiIndonesia(todayIso)}`,
-    rightCenterX,
-    signY,
-    { align: 'center' }
-  );
-  doc.text('Bendahara / Kasir Penerima,', rightCenterX, signY + 5, {
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text('Menyetujui,', col2CenterX, signY, { align: 'center' });
+  doc.text('Bendahara Umum,', col2CenterX, signY + 4.5, {
     align: 'center',
   });
   doc.setFont('helvetica', 'bold');
-  doc.text(`( ${settings.cashierName} )`, rightCenterX, signY + 24, {
+  const treasurerDisplayName = (
+    settings.treasurerName || DEFAULT_SCHOOL_SETTINGS.treasurerName || 'Esih Sukaesih'
+  ).trim();
+  doc.text(`( ${treasurerDisplayName} )`, col2CenterX, signY + 23.5, {
     align: 'center',
   });
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.25);
+  doc.line(col2CenterX - 28, signY + 24.5, col2CenterX + 28, signY + 24.5);
+  const treasurerNipLine = formatNipLine(settings.treasurerNip);
+  if (treasurerNipLine) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(treasurerNipLine, col2CenterX, signY + 28.5, { align: 'center' });
+  }
+
+  // 3. Kolom Kanan: Kasir / Bendahara Penerima
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  doc.setTextColor(15, 23, 42);
+  doc.text(
+    `${settings.schoolCity || 'Sukabumi'}, ${formatTanggalResmiIndonesia(todayIso)}`,
+    col3CenterX,
+    signY,
+    { align: 'center' }
+  );
+  doc.text('Bendahara / Kasir Penerima,', col3CenterX, signY + 4.5, {
+    align: 'center',
+  });
+  doc.setFont('helvetica', 'bold');
+  doc.text(`( ${settings.cashierName} )`, col3CenterX, signY + 23.5, {
+    align: 'center',
+  });
+  doc.setDrawColor(148, 163, 184);
+  doc.setLineWidth(0.25);
+  doc.line(col3CenterX - 28, signY + 24.5, col3CenterX + 28, signY + 24.5);
   const cashierNipLine = formatNipLine(settings.cashierNip);
   if (cashierNipLine) {
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.text(cashierNipLine, rightCenterX, signY + 28.5, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(71, 85, 105);
+    doc.text(cashierNipLine, col3CenterX, signY + 28.5, { align: 'center' });
   }
 
   doc.save(

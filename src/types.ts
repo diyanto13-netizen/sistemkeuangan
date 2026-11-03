@@ -257,6 +257,11 @@ export interface SchoolSettings {
   principalNip: string;
   principalEmail: string;
   principalPasswordHint: string;
+  treasurerName?: string;
+  treasurerNip?: string;
+  bankName?: string;
+  bankAccountNo?: string;
+  bankAccountHolder?: string;
   updatedBy?: string;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
@@ -277,6 +282,11 @@ export const DEFAULT_SCHOOL_SETTINGS: SchoolSettings = {
   principalNip: 'NIP/NUPTK. 19690410 199412 1 002',
   principalEmail: 'kepsek@smkspgri1.sch.id',
   principalPasswordHint: 'SmksPgri1#2026',
+  treasurerName: 'Esih Sukaesih',
+  treasurerNip: '',
+  bankName: 'Bank BRI',
+  bankAccountNo: '0092-0101-11495-39',
+  bankAccountHolder: 'SMK PGRI 1',
 };
 
 export function buildReceiptWhatsAppUrl(
@@ -342,6 +352,10 @@ export function buildBillingWhatsAppUrl(
     lines.push(`- Pembiayaan Kelas XII: ${formatRupiah(student.class12Balance)}`);
   }
 
+  const bankName = settings.bankName || 'Bank BRI';
+  const bankAccountNo = settings.bankAccountNo || '0092-0101-11495-39';
+  const bankAccountHolder = settings.bankAccountHolder || 'SMK PGRI 1';
+
   const message = [
     `Yth. Bapak/Ibu Orang Tua / Wali Murid dari:`,
     `*${student.name}* (NIS: ${student.nis} / Kelas: ${student.className})`,
@@ -353,8 +367,19 @@ export function buildBillingWhatsAppUrl(
     `----------------------------------------`,
     `*Total Tagihan: ${formatRupiah(student.totalBalance)}*`,
     ``,
-    `*Instruksi Pembayaran:*`,
-    `Pembayaran dapat dilakukan langsung melalui Loket Kasir Tata Usaha ${settings.schoolName} (${settings.schoolAddress}) pada jam kerja. Apabila sudah melakukan pembayaran, mohon abaikan pesan ini atau konfirmasi bukti kuitansi. Terima kasih.`,
+    `*Metode Pembayaran:*`,
+    `1. *Loket Kasir Sekolah (Tunai):*`,
+    `   Dapat dibayarkan langsung ke Petugas Kasir Tata Usaha ${settings.schoolName} (${settings.schoolAddress}) pada hari dan jam kerja operasional sekolah.`,
+    ``,
+    `2. *Pembayaran Secara Transfer Bank (Non-Tunai):*`,
+    `   - Bank: *${bankName}*`,
+    `   - No. Rekening: *${bankAccountNo}*`,
+    `   - Atas Nama: *${bankAccountHolder}*`,
+    ``,
+    `*Catatan Penting:*`,
+    `Apabila telah melakukan pembayaran via Transfer Bank, mohon kirimkan foto/bukti transfer ke nomor WhatsApp ini agar petugas kasir dapat memverifikasi dan mencatatkan Kuitansi Resmi.`,
+    ``,
+    `Apabila pembayaran sudah diselesaikan sebelumnya, mohon abaikan pesan ini. Terima kasih atas perhatian dan kerja sama Bapak/Ibu.`,
   ].join('\n');
 
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;

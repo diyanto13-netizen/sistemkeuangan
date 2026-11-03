@@ -773,6 +773,23 @@ export default function App() {
       )
         .trim()
         .slice(0, 60),
+      treasurerName: (
+        updated.treasurerName || DEFAULT_SCHOOL_SETTINGS.treasurerName || 'Esih Sukaesih'
+      )
+        .trim()
+        .slice(0, 100),
+      treasurerNip: (updated.treasurerNip || '').trim().slice(0, 50),
+      bankName: (updated.bankName || DEFAULT_SCHOOL_SETTINGS.bankName || 'Bank BRI').trim().slice(0, 60),
+      bankAccountNo: (
+        updated.bankAccountNo || DEFAULT_SCHOOL_SETTINGS.bankAccountNo || '0092-0101-11495-39'
+      )
+        .trim()
+        .slice(0, 50),
+      bankAccountHolder: (
+        updated.bankAccountHolder || DEFAULT_SCHOOL_SETTINGS.bankAccountHolder || 'SMK PGRI 1'
+      )
+        .trim()
+        .slice(0, 100),
       updatedBy: SCHOOL_CLOUD_TENANT_ID,
     };
 
@@ -4663,6 +4680,31 @@ export default function App() {
                       className="rounded-lg border border-slate-300 bg-white py-2 pr-3 pl-8 text-xs focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-900"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Banner Informasi Rekening Transfer Bank pada Pesan WhatsApp Penagihan */}
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900/60 dark:bg-emerald-950/25">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
+                    <CreditCard className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-emerald-950 dark:text-emerald-100">
+                      Rekening Resmi Sekolah untuk Pembayaran Transfer (Tercantum Otomatis di WhatsApp):
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-800 dark:text-emerald-300">
+                      Bank: <span className="font-bold">{schoolSettings.bankName || 'Bank BRI'}</span> • No. Rekening:{' '}
+                      <span className="font-mono font-extrabold tracking-wide text-emerald-950 dark:text-emerald-100">
+                        {schoolSettings.bankAccountNo || '0092-0101-11495-39'}
+                      </span>{' '}
+                      • a.n <span className="font-bold">{schoolSettings.bankAccountHolder || 'SMK PGRI 1'}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <span>Format Penagihan WhatsApp Siap Kirim</span>
                 </div>
               </div>
 
