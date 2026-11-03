@@ -3055,51 +3055,60 @@ export default function App() {
 
               {/* 4 KPI Summary Cards */}
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                  <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Total Penerimaan Kas
                   </p>
-                  <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  <p
+                    title={formatRupiah(metrics.totalRevenue)}
+                    className="mt-1.5 truncate font-mono text-base font-bold tracking-tight tabular-nums text-slate-900 sm:text-lg dark:text-slate-100"
+                  >
                     {formatRupiah(metrics.totalRevenue)}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
                     Dari {metrics.txCount} transaksi sah
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                  <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Penerimaan Hari Ini ({todayStr})
                   </p>
-                  <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                  <p
+                    title={formatRupiah(metrics.todayRevenue)}
+                    className="mt-1.5 truncate font-mono text-base font-bold tracking-tight tabular-nums text-emerald-600 sm:text-lg dark:text-emerald-400"
+                  >
                     {formatRupiah(metrics.todayRevenue)}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
                     Rekapitulasi kas harian aktif
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                  <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Total Sisa Tunggakan Siswa
                   </p>
-                  <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400">
+                  <p
+                    title={formatRupiah(metrics.totalArrears)}
+                    className="mt-1.5 truncate font-mono text-base font-bold tracking-tight tabular-nums text-amber-600 sm:text-lg dark:text-amber-400"
+                  >
                     {formatRupiah(metrics.totalArrears)}
                   </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
                     {metrics.studentsWithArrears} dari {students.length} siswa memiliki
                     tagihan
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
-                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                <div className="min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                  <p className="truncate text-xs font-semibold text-slate-500 dark:text-slate-400">
                     Total Siswa Terdaftar
                   </p>
-                  <p className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-900 dark:text-slate-100">
+                  <p className="mt-1.5 truncate font-mono text-base font-bold tracking-tight tabular-nums text-slate-900 sm:text-lg dark:text-slate-100">
                     {students.length} Siswa
                   </p>
-                  <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  <p className="mt-1 truncate text-xs text-slate-500 dark:text-slate-400">
                     Kelas X, XI, dan XII aktif
                   </p>
                 </div>
