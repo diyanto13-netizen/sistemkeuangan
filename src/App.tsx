@@ -523,55 +523,99 @@ export default function App() {
     const unsubStudents = onSnapshot(
       studentsQuery,
       async (snapshot) => {
-        const cloudList: Student[] = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Student, 'id'>),
-        }));
+        const rawCloudList: Student[] = snapshot.docs.map((d) => {
+          const data = d.data() as Omit<Student, 'id'>;
+          const sppBalance = Math.max(0, Math.round(Number(data.sppBalance) || 0));
+          const dspBalance = Math.max(0, Math.round(Number(data.dspBalance) || 0));
+          const class11Balance = Math.max(0, Math.round(Number(data.class11Balance) || 0));
+          const class12Balance = Math.max(0, Math.round(Number(data.class12Balance) || 0));
+          return {
+            id: d.id,
+            ...data,
+            sppBalance,
+            dspBalance,
+            class11Balance,
+            class12Balance,
+            totalBalance: sppBalance + dspBalance + class11Balance + class12Balance,
+            paidMonths: Array.from(new Set(data.paidMonths || [])).slice(0, 60),
+          };
+        });
 
-        // Jika di Browser 1 sudah ada data siswa di cache lokal yang belum terunggah ke Cloud Firestore, unggah otomatis (Auto-Backfill)
+        // Deduplikasi otomatis berdasarkan NIS agar tidak pernah terjadi data siswa ganda
+        const uniqueByNis = new Map<string, Student>();
+        rawCloudList.forEach((st) => {
+          const key = (st.nis || st.id).trim().toLowerCase();
+          if (!uniqueByNis.has(key)) {
+            uniqueByNis.set(key, st);
+          }
+        });
+        const cloudList = Array.from(uniqueByNis.values());
+
+        // Auto-Backfill dari localStorage HANYA jika Cloud Firestore benar-benar masih kosong (0 dokumen),
+        // sehingga siswa yang sudah dihapus di satu browser tidak pernah muncul kembali dari cache browser lain.
         let mergedList = [...cloudList];
         if (!hasBackfilledStudentsRef.current) {
           hasBackfilledStudentsRef.current = true;
-          try {
-            const rawLocal = localStorage.getItem('smks_pgri1_students_cache');
-            const localStudents: Student[] = rawLocal ? JSON.parse(rawLocal) : [];
-            const cloudNisSet = new Set(cloudList.map((s) => s.nis.toLowerCase()));
-            const unsyncedLocal = localStudents.filter(
-              (ls) => ls.nis && !cloudNisSet.has(ls.nis.toLowerCase())
-            );
+          if (cloudList.length === 0) {
+            try {
+              const rawLocal = localStorage.getItem('smks_pgri1_students_cache');
+              const localStudents: Student[] = rawLocal ? JSON.parse(rawLocal) : [];
+              const seenLocalNis = new Set<string>();
+              const unsyncedLocal = localStudents.filter((ls) => {
+                if (!ls.nis) return false;
+                const key = ls.nis.trim().toLowerCase();
+                if (seenLocalNis.has(key)) return false;
+                seenLocalNis.add(key);
+                return true;
+              });
 
-            if (unsyncedLocal.length > 0) {
-              mergedList = [...cloudList, ...unsyncedLocal];
-              const CHUNK_SIZE = 400;
-              for (let i = 0; i < unsyncedLocal.length; i += CHUNK_SIZE) {
-                const chunk = unsyncedLocal.slice(i, i + CHUNK_SIZE);
-                const batch = writeBatch(db);
-                chunk.forEach((st) => {
-                  const stRef = doc(db, 'students', st.id);
-                  batch.set(stRef, {
-                    nis: st.nis,
-                    name: st.name,
-                    className: st.className,
-                    gradeLevel: st.gradeLevel,
-                    major: st.major,
-                    waNumber: st.waNumber,
-                    sppBalance: st.sppBalance,
-                    dspBalance: st.dspBalance,
-                    class11Balance: st.class11Balance,
-                    class12Balance: st.class12Balance,
-                    totalBalance:
-                      st.sppBalance + st.dspBalance + st.class11Balance + st.class12Balance,
-                    paidMonths: (st.paidMonths || []).slice(0, 12),
-                    createdBy: SCHOOL_CLOUD_TENANT_ID,
-                    createdAt: serverTimestamp(),
-                    updatedAt: serverTimestamp(),
-                  });
+              if (unsyncedLocal.length > 0) {
+                mergedList = unsyncedLocal.map((st) => {
+                  const sppBalance = Math.max(0, Math.round(Number(st.sppBalance) || 0));
+                  const dspBalance = Math.max(0, Math.round(Number(st.dspBalance) || 0));
+                  const class11Balance = Math.max(0, Math.round(Number(st.class11Balance) || 0));
+                  const class12Balance = Math.max(0, Math.round(Number(st.class12Balance) || 0));
+                  return {
+                    ...st,
+                    sppBalance,
+                    dspBalance,
+                    class11Balance,
+                    class12Balance,
+                    totalBalance: sppBalance + dspBalance + class11Balance + class12Balance,
+                    paidMonths: Array.from(new Set(st.paidMonths || [])).slice(0, 60),
+                  };
                 });
-                await batch.commit();
+                const CHUNK_SIZE = 400;
+                for (let i = 0; i < mergedList.length; i += CHUNK_SIZE) {
+                  const chunk = mergedList.slice(i, i + CHUNK_SIZE);
+                  const batch = writeBatch(db);
+                  chunk.forEach((st) => {
+                    const stRef = doc(db, 'students', st.id);
+                    batch.set(stRef, {
+                      nis: st.nis,
+                      name: st.name,
+                      className: st.className,
+                      gradeLevel: st.gradeLevel,
+                      major: st.major,
+                      waNumber: st.waNumber,
+                      sppBalance: st.sppBalance,
+                      dspBalance: st.dspBalance,
+                      class11Balance: st.class11Balance,
+                      class12Balance: st.class12Balance,
+                      totalBalance:
+                        st.sppBalance + st.dspBalance + st.class11Balance + st.class12Balance,
+                      paidMonths: (st.paidMonths || []).slice(0, 60),
+                      createdBy: SCHOOL_CLOUD_TENANT_ID,
+                      createdAt: serverTimestamp(),
+                      updatedAt: serverTimestamp(),
+                    });
+                  });
+                  await batch.commit();
+                }
               }
+            } catch (syncErr) {
+              console.warn('Auto-backfill local students to cloud warning:', syncErr);
             }
-          } catch (syncErr) {
-            console.warn('Auto-backfill local students to cloud warning:', syncErr);
           }
         }
 
@@ -589,24 +633,51 @@ export default function App() {
     const unsubTx = onSnapshot(
       txQuery,
       async (snapshot) => {
-        const cloudTxs: Transaction[] = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Transaction, 'id'>),
-        }));
+        const rawCloudTxs: Transaction[] = snapshot.docs.map((d) => {
+          const data = d.data() as Omit<Transaction, 'id'>;
+          const sppAmount = Math.max(0, Math.round(Number(data.sppAmount) || 0));
+          const dspAmount = Math.max(0, Math.round(Number(data.dspAmount) || 0));
+          const class11Amount = Math.max(0, Math.round(Number(data.class11Amount) || 0));
+          const class12Amount = Math.max(0, Math.round(Number(data.class12Amount) || 0));
+          return {
+            id: d.id,
+            ...data,
+            sppAmount,
+            dspAmount,
+            class11Amount,
+            class12Amount,
+            totalAmount: sppAmount + dspAmount + class11Amount + class12Amount,
+            sppMonths: Array.from(new Set(data.sppMonths || [])).slice(0, 12),
+          };
+        });
+
+        // Deduplikasi transaksi berdasarkan ID dan Nomor Kwitansi (receiptNo)
+        const uniqueTxMap = new Map<string, Transaction>();
+        const seenReceipts = new Set<string>();
+        rawCloudTxs.forEach((tx) => {
+          if (!uniqueTxMap.has(tx.id) && !seenReceipts.has(tx.receiptNo)) {
+            uniqueTxMap.set(tx.id, tx);
+            seenReceipts.add(tx.receiptNo);
+          }
+        });
+        const cloudTxs = Array.from(uniqueTxMap.values());
 
         let mergedTxs = [...cloudTxs];
         if (!hasBackfilledTxRef.current) {
           hasBackfilledTxRef.current = true;
-          try {
-            const rawLocalTxs = localStorage.getItem('smks_pgri1_transactions_cache');
-            const localTxs: Transaction[] = rawLocalTxs ? JSON.parse(rawLocalTxs) : [];
-            const cloudIdSet = new Set(cloudTxs.map((t) => t.id));
-            const unsyncedTxs = localTxs.filter((lt) => lt.id && !cloudIdSet.has(lt.id));
-            if (unsyncedTxs.length > 0) {
-              mergedTxs = [...cloudTxs, ...unsyncedTxs];
+          if (cloudTxs.length === 0) {
+            try {
+              const rawLocalTxs = localStorage.getItem('smks_pgri1_transactions_cache');
+              const localTxs: Transaction[] = rawLocalTxs ? JSON.parse(rawLocalTxs) : [];
+              const unsyncedTxs = localTxs.filter(
+                (lt) => lt.id && !uniqueTxMap.has(lt.id) && !seenReceipts.has(lt.receiptNo)
+              );
+              if (unsyncedTxs.length > 0) {
+                mergedTxs = [...unsyncedTxs];
+              }
+            } catch {
+              // ignore
             }
-          } catch {
-            // ignore
           }
         }
 
@@ -646,6 +717,12 @@ export default function App() {
             principalEmail: data.principalEmail || DEFAULT_SCHOOL_SETTINGS.principalEmail,
             principalPasswordHint:
               data.principalPasswordHint || DEFAULT_SCHOOL_SETTINGS.principalPasswordHint,
+            treasurerName: data.treasurerName || DEFAULT_SCHOOL_SETTINGS.treasurerName,
+            treasurerNip: data.treasurerNip || DEFAULT_SCHOOL_SETTINGS.treasurerNip,
+            bankName: data.bankName || DEFAULT_SCHOOL_SETTINGS.bankName,
+            bankAccountNo: data.bankAccountNo || DEFAULT_SCHOOL_SETTINGS.bankAccountNo,
+            bankAccountHolder:
+              data.bankAccountHolder || DEFAULT_SCHOOL_SETTINGS.bankAccountHolder,
             updatedBy: SCHOOL_CLOUD_TENANT_ID,
           };
           setSchoolSettings(merged);
@@ -697,7 +774,7 @@ export default function App() {
             class12Balance: st.class12Balance,
             totalBalance:
               st.sppBalance + st.dspBalance + st.class11Balance + st.class12Balance,
-            paidMonths: (st.paidMonths || []).slice(0, 12),
+            paidMonths: (st.paidMonths || []).slice(0, 60),
             createdBy: SCHOOL_CLOUD_TENANT_ID,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -1169,9 +1246,18 @@ export default function App() {
       return;
     }
 
-    // Cek duplikasi NIS saat tambah baru
-    if (!editingStudent && students.some((s) => s.nis.toLowerCase() === cleanNis.toLowerCase())) {
-      showToast(`Siswa dengan NIS ${cleanNis} sudah terdaftar.`, 'error');
+    // Cek duplikasi NIS baik saat tambah siswa baru maupun saat mengedit NIS siswa
+    if (
+      students.some(
+        (s) =>
+          s.id !== editingStudent?.id &&
+          s.nis.trim().toLowerCase() === cleanNis.toLowerCase()
+      )
+    ) {
+      showToast(
+        `Siswa lain dengan NIS ${cleanNis} sudah terdaftar. Gunakan NIS yang unik agar tidak terjadi data ganda.`,
+        'error'
+      );
       return;
     }
 
@@ -1198,7 +1284,7 @@ export default function App() {
           class11Balance: c11,
           class12Balance: c12,
           totalBalance,
-          paidMonths: editingStudent.paidMonths.slice(0, 12),
+          paidMonths: editingStudent.paidMonths.slice(0, 60),
           createdBy: SCHOOL_CLOUD_TENANT_ID,
         };
         const nextStudents = students
@@ -1220,7 +1306,7 @@ export default function App() {
           class11Balance: c11,
           class12Balance: c12,
           totalBalance,
-          paidMonths: editingStudent.paidMonths.slice(0, 12),
+          paidMonths: editingStudent.paidMonths.slice(0, 60),
           updatedAt: serverTimestamp(),
         });
         showToast(`Data siswa ${cleanName} (${cleanNis}) berhasil diperbarui di Cloud.`, 'success');
@@ -1739,11 +1825,14 @@ export default function App() {
     }
 
     if (posCategory === 'SPP') {
-      if (posSelectedMonths.length === 0) {
-        showToast('Centang minimal 1 bulan pada kalender SPP (Juli - Juni).', 'error');
+      const unpaidSelectedMonths = posSelectedMonths.filter(
+        (m) => !selectedPosStudent.paidMonths.includes(m)
+      );
+      if (unpaidSelectedMonths.length === 0) {
+        showToast('Centang minimal 1 bulan SPP yang belum lunas pada kalender SPP (Juli - Juni).', 'error');
         return;
       }
-      const amount = posSelectedMonths.length * SPP_MONTHLY_FEE;
+      const amount = unpaidSelectedMonths.length * SPP_MONTHLY_FEE;
       if (amount > selectedPosStudent.sppBalance) {
         showToast(
           `Nominal SPP (${formatRupiah(amount)}) melebihi sisa tagihan SPP siswa (${formatRupiah(
@@ -1762,9 +1851,9 @@ export default function App() {
           id: `cart_spp_${Date.now()}`,
           category: 'SPP',
           amount,
-          sppMonths: posSelectedMonths,
+          sppMonths: unpaidSelectedMonths,
           sppYear: posSppYear,
-          description: `SPP ${posSelectedMonths.length} Bulan (${posSelectedMonths.join(', ')})`,
+          description: `SPP ${unpaidSelectedMonths.length} Bulan (${unpaidSelectedMonths.join(', ')})`,
         },
       ]);
       setPosSelectedMonths([]);
@@ -1819,6 +1908,7 @@ export default function App() {
 
   // Eksekusi Checkout Keranjang menggunakan Firestore Batch Writes
   const handleCheckoutPos = async () => {
+    if (busyAction) return;
     if (!currentUser || !isKasir) {
       showToast('Hanya Kasir yang dapat memproses transaksi pembayaran.', 'error');
       return;
@@ -1837,11 +1927,30 @@ export default function App() {
     const c11Item = cart.find((c) => c.category === 'Pembiayaan Kelas XI');
     const c12Item = cart.find((c) => c.category === 'Pembiayaan Kelas XII');
 
-    const sppAmount = sppItem ? sppItem.amount : 0;
-    const dspAmount = dspItem ? dspItem.amount : 0;
-    const class11Amount = c11Item ? c11Item.amount : 0;
-    const class12Amount = c12Item ? c12Item.amount : 0;
+    const sppAmount = sppItem ? Math.round(Number(sppItem.amount) || 0) : 0;
+    const dspAmount = dspItem ? Math.round(Number(dspItem.amount) || 0) : 0;
+    const class11Amount = c11Item ? Math.round(Number(c11Item.amount) || 0) : 0;
+    const class12Amount = c12Item ? Math.round(Number(c12Item.amount) || 0) : 0;
     const totalAmount = sppAmount + dspAmount + class11Amount + class12Amount;
+
+    if (totalAmount <= 0) {
+      showToast('Total pembayaran harus lebih dari Rp 0.', 'error');
+      return;
+    }
+
+    // Validasi ulang terhadap saldo terbaru siswa agar tidak terjadi tumpang tindih atau minus
+    if (
+      sppAmount > selectedPosStudent.sppBalance ||
+      dspAmount > selectedPosStudent.dspBalance ||
+      class11Amount > selectedPosStudent.class11Balance ||
+      class12Amount > selectedPosStudent.class12Balance
+    ) {
+      showToast(
+        'Nominal pembayaran di keranjang melebihi sisa saldo tagihan siswa saat ini. Periksa kembali keranjang Anda.',
+        'error'
+      );
+      return;
+    }
 
     const newSppBalance = Math.max(0, selectedPosStudent.sppBalance - sppAmount);
     const newDspBalance = Math.max(0, selectedPosStudent.dspBalance - dspAmount);
@@ -1852,7 +1961,7 @@ export default function App() {
 
     const newPaidMonths = Array.from(
       new Set([...selectedPosStudent.paidMonths, ...(sppItem ? sppItem.sppMonths : [])])
-    ).slice(0, 12);
+    ).slice(0, 60);
 
     const txId = `tx_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const receiptNo = `KWT-${todayStr.replace(/-/g, '')}-${Math.floor(
@@ -3168,7 +3277,10 @@ export default function App() {
                               {formatRupiah(tx.totalAmount)}
                             </p>
                             <button
-                              onClick={() => generateReceiptPDF(tx, 0, schoolSettings)}
+                              onClick={() => {
+                                const st = students.find((s) => s.id === tx.studentId);
+                                generateReceiptPDF(tx, st ? st.totalBalance : 0, schoolSettings);
+                              }}
                               className="text-xs text-blue-600 hover:underline dark:text-blue-400"
                             >
                               Unduh PDF

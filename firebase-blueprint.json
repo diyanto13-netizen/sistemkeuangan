@@ -141,6 +141,31 @@
           "minLength": 0,
           "maxLength": 60
         },
+        "treasurerName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "treasurerNip": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "bankName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 60
+        },
+        "bankAccountNo": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50
+        },
+        "bankAccountHolder": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 100
+        },
         "updatedBy": {
           "type": "string",
           "minLength": 1,

@@ -92,6 +92,7 @@ service cloud.firestore {
           'schoolName', 'schoolSubtitle', 'schoolAddress', 'schoolContact', 'schoolCity',
           'logoDataUrl', 'cashierName', 'cashierNip', 'cashierEmail', 'cashierPasswordHint',
           'principalName', 'principalNip', 'principalEmail', 'principalPasswordHint',
+          'treasurerName', 'treasurerNip', 'bankName', 'bankAccountNo', 'bankAccountHolder',
           'updatedBy', 'createdAt', 'updatedAt'
         ]) &&
         data.schoolName is string && data.schoolName.size() >= 2 && data.schoolName.size() <= 120 &&
@@ -108,6 +109,11 @@ service cloud.firestore {
         data.principalNip is string && data.principalNip.size() >= 0 && data.principalNip.size() <= 50 &&
         data.principalEmail is string && data.principalEmail.size() >= 3 && data.principalEmail.size() <= 120 &&
         data.principalPasswordHint is string && data.principalPasswordHint.size() >= 0 && data.principalPasswordHint.size() <= 60 &&
+        (!('treasurerName' in data) || (data.treasurerName is string && data.treasurerName.size() <= 100)) &&
+        (!('treasurerNip' in data) || (data.treasurerNip is string && data.treasurerNip.size() <= 50)) &&
+        (!('bankName' in data) || (data.bankName is string && data.bankName.size() <= 60)) &&
+        (!('bankAccountNo' in data) || (data.bankAccountNo is string && data.bankAccountNo.size() <= 50)) &&
+        (!('bankAccountHolder' in data) || (data.bankAccountHolder is string && data.bankAccountHolder.size() <= 100)) &&
         data.updatedBy is string && data.updatedBy.size() >= 1 && data.updatedBy.size() <= 128 && data.updatedBy.matches('^[a-zA-Z0-9_\\-]+$') &&
         isAuthorizedActor(data.updatedBy) &&
         data.createdAt is timestamp &&
@@ -137,8 +143,8 @@ service cloud.firestore {
         data.class12Balance is number && data.class12Balance >= 0 && data.class12Balance <= 100000000 &&
         data.totalBalance is number && data.totalBalance >= 0 && data.totalBalance <= 400000000 &&
         data.totalBalance == (data.sppBalance + data.dspBalance + data.class11Balance + data.class12Balance) &&
-        data.paidMonths is list && data.paidMonths.size() <= 12 &&
-        (data.paidMonths.size() == 0 || (data.paidMonths[0] is string && data.paidMonths[0].size() <= 20)) &&
+        data.paidMonths is list && data.paidMonths.size() <= 60 &&
+        (data.paidMonths.size() == 0 || (data.paidMonths[0] is string && data.paidMonths[0].size() <= 30)) &&
         data.createdBy is string && data.createdBy.size() >= 1 && data.createdBy.size() <= 128 && data.createdBy.matches('^[a-zA-Z0-9_\\-]+$') &&
         isAuthorizedActor(data.createdBy) &&
         data.createdAt is timestamp &&
@@ -174,7 +180,7 @@ service cloud.firestore {
         data.totalAmount is number && data.totalAmount > 0 && data.totalAmount <= 400000000 &&
         data.totalAmount == (data.sppAmount + data.dspAmount + data.class11Amount + data.class12Amount) &&
         data.sppMonths is list && data.sppMonths.size() <= 12 &&
-        (data.sppMonths.size() == 0 || (data.sppMonths[0] is string && data.sppMonths[0].size() <= 20)) &&
+        (data.sppMonths.size() == 0 || (data.sppMonths[0] is string && data.sppMonths[0].size() <= 30)) &&
         data.sppYear is string && data.sppYear.size() >= 4 && data.sppYear.size() <= 9 &&
         data.notes is string && data.notes.size() >= 0 && data.notes.size() <= 300 &&
         data.cashierName is string && data.cashierName.size() >= 1 && data.cashierName.size() <= 100 &&
@@ -249,6 +255,7 @@ service cloud.firestore {
             'schoolName', 'schoolSubtitle', 'schoolAddress', 'schoolContact', 'schoolCity',
             'logoDataUrl', 'cashierName', 'cashierNip', 'cashierEmail', 'cashierPasswordHint',
             'principalName', 'principalNip', 'principalEmail', 'principalPasswordHint',
+            'treasurerName', 'treasurerNip', 'bankName', 'bankAccountNo', 'bankAccountHolder',
             'updatedBy', 'updatedAt'
           ]) ||
           isAdmin()

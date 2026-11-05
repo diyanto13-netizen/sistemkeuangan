@@ -642,20 +642,35 @@ export function generateSppCardPDF(
     true
   );
 
-  // Mapping bulan Juli - Juni
+  // Mapping bulan Juli - Juni spesifik sesuai Tahun Pelajaran (academicYear)
   const studentTxs = transactions.filter(
     (t) => t.studentId === student.id && t.sppAmount > 0
   );
 
   const tableRows = ACADEMIC_MONTHS.map((m, idx) => {
-    const labelWithYear = `${m.name}`;
-    const isPaidInStudentDoc = student.paidMonths.some(
-      (pm) =>
-        pm.toLowerCase().includes(m.name.toLowerCase()) ||
-        pm.endsWith(`-${m.code}`)
-    );
+    const labelWithYear = `${m.name} (${academicYear})`;
+    const fullMonthKey = `${m.name} ${academicYear}`.toLowerCase();
+
+    const isPaidInStudentDoc = (student.paidMonths || []).some((pm) => {
+      const normPm = pm.trim().toLowerCase();
+      if (normPm === fullMonthKey) return true;
+      if (!normPm.includes('/') && normPm.startsWith(m.name.toLowerCase())) return true;
+      return false;
+    });
+
     const matchingTx = studentTxs.find((t) =>
-      t.sppMonths.some((sm) => sm.toLowerCase().includes(m.name.toLowerCase()))
+      (t.sppMonths || []).some((sm) => {
+        const normSm = sm.trim().toLowerCase();
+        if (normSm === fullMonthKey) return true;
+        if (
+          !normSm.includes('/') &&
+          (!t.sppYear || t.sppYear === academicYear) &&
+          normSm.startsWith(m.name.toLowerCase())
+        ) {
+          return true;
+        }
+        return false;
+      })
     );
     const isPaid = isPaidInStudentDoc || Boolean(matchingTx);
 
@@ -1496,7 +1511,12 @@ export function parseStudentImportExcelBuffer(
   const existingSet = new Set(existingNisList.map((n) => n.toLowerCase()));
   const seenInFile = new Set<string>();
 
-  return rawRows.map((row, index) => {
+  // Abaikan baris yang benar-benar kosong di akhir sheet Excel
+  const nonEmptyRows = rawRows.filter((row) =>
+    Object.values(row).some((val) => String(val ?? '').trim() !== '')
+  );
+
+  return nonEmptyRows.map((row, index) => {
     const rowNumber = index + 2; // Baris ke-1 adalah header Excel
 
     // Normalisasi key kolom agar fleksibel terhadap spasi/huruf besar-kecil
@@ -1547,7 +1567,17 @@ export function parseStudentImportExcelBuffer(
 
     const parseOptionalAmount = (val: unknown, fallback: number): number => {
       if (val === '' || val === null || val === undefined) return fallback;
-      const numeric = Number(String(val).replace(/[^0-9.-]/g, ''));
+      if (typeof val === 'number') {
+        if (Number.isNaN(val)) return fallback;
+        return Math.max(0, Math.min(100000000, Math.round(val)));
+      }
+      const rawStr = String(val).trim();
+      if (!rawStr) return fallback;
+      // Hapus sen desimal (,00 atau .00 di akhir) lalu ambil seluruh digit angka Rupiah
+      const withoutCents = rawStr.replace(/[,.]00$/, '');
+      const digitsOnly = withoutCents.replace(/[^0-9-]/g, '');
+      if (!digitsOnly || digitsOnly === '-') return fallback;
+      const numeric = Number(digitsOnly);
       if (Number.isNaN(numeric)) return fallback;
       return Math.max(0, Math.min(100000000, Math.round(numeric)));
     };

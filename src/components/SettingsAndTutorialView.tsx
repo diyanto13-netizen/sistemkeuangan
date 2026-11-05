@@ -190,6 +190,18 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
             .trim()
             .slice(0, 100),
         treasurerNip: (formState.treasurerNip || '').trim().slice(0, 50),
+        bankName:
+          (formState.bankName || DEFAULT_SCHOOL_SETTINGS.bankName || 'Bank BRI')
+            .trim()
+            .slice(0, 60),
+        bankAccountNo:
+          (formState.bankAccountNo || DEFAULT_SCHOOL_SETTINGS.bankAccountNo || '0092-0101-11495-39')
+            .trim()
+            .slice(0, 50),
+        bankAccountHolder:
+          (formState.bankAccountHolder || DEFAULT_SCHOOL_SETTINGS.bankAccountHolder || 'SMK PGRI 1')
+            .trim()
+            .slice(0, 100),
       });
     } finally {
       setSaving(false);
