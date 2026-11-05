@@ -2060,14 +2060,29 @@ export default function App() {
       .reduce((sum, t) => sum + t.totalAmount, 0);
     const totalArrears = students.reduce((sum, s) => sum + s.totalBalance, 0);
     const studentsWithArrears = students.filter((s) => s.totalBalance > 0).length;
+    const studentsPaidOff = students.filter((s) => s.totalBalance <= 0).length;
     return {
       totalRevenue,
       todayRevenue,
       totalArrears,
       studentsWithArrears,
+      studentsPaidOff,
       txCount: transactions.length,
     };
   }, [transactions, students, todayStr]);
+
+  // 5 Siswa dengan Tunggakan Tertinggi untuk Penagihan Proaktif di Dasbor Eksekutif
+  const top5ArrearsStudents = useMemo(() => {
+    return [...students]
+      .filter((s) => s.totalBalance > 0)
+      .sort((a, b) => {
+        if (b.totalBalance !== a.totalBalance) {
+          return b.totalBalance - a.totalBalance;
+        }
+        return b.sppBalance - a.sppBalance;
+      })
+      .slice(0, 5);
+  }, [students]);
 
   // Helper label nama bulan Indonesia untuk Laporan Bulanan (YYYY-MM -> "November 2026")
   const selectedMonthLabel = useMemo(() => {
@@ -3200,6 +3215,177 @@ export default function App() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Kartu Terpisah: Status Saldo Siswa & 5 Siswa dengan Tunggakan Tertinggi (Penagihan Proaktif) */}
+              <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 pb-4 dark:border-slate-800">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                        Status Saldo Siswa & Prioritas 5 Tunggakan Tertinggi
+                      </h2>
+                    </div>
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                      Menyoroti 5 siswa dengan akumulasi sisa tagihan terbesar untuk memudahkan
+                      tindak lanjut penagihan proaktif ke Wali Murid.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs dark:border-slate-800 dark:bg-slate-950">
+                      <span className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-400">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        <span>Lunas: {metrics.studentsPaidOff} Siswa</span>
+                      </span>
+                      <span className="text-slate-300 dark:text-slate-700">|</span>
+                      <span className="flex items-center gap-1.5 font-semibold text-amber-700 dark:text-amber-400">
+                        <Wallet className="h-3.5 w-3.5" />
+                        <span>Menunggak: {metrics.studentsWithArrears} Siswa</span>
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveMenu('arrears')}
+                      className="flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-xs font-semibold text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 whitespace-nowrap shrink-0"
+                    >
+                      <MessageSquare className="h-3.5 w-3.5" />
+                      <span>Buka Modul Penagihan ({metrics.studentsWithArrears})</span>
+                    </button>
+                  </div>
+                </div>
+
+                {top5ArrearsStudents.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-10 text-center">
+                    <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+                    <p className="mt-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                      Tidak Ada Tunggakan Aktif
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                      {students.length === 0
+                        ? 'Belum ada data siswa terdaftar di sistem.'
+                        : 'Seluruh siswa yang terdaftar telah melunasi kewajiban pembayaran.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-4 overflow-x-auto">
+                    <table className="w-full border-collapse text-left text-xs">
+                      <thead>
+                        <tr className="border-b border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                          <th className="py-2.5 pr-3 font-semibold">Prioritas</th>
+                          <th className="px-3 py-2.5 font-semibold">Identitas Siswa</th>
+                          <th className="px-3 py-2.5 text-right font-semibold">Sisa SPP</th>
+                          <th className="px-3 py-2.5 text-right font-semibold">Sisa DSP</th>
+                          <th className="px-3 py-2.5 text-right font-semibold">
+                            Kls XI / XII
+                          </th>
+                          <th className="px-3 py-2.5 text-right font-semibold">
+                            Total Tunggakan
+                          </th>
+                          <th className="py-2.5 pl-3 text-right font-semibold">
+                            Aksi Penagihan Proaktif
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
+                        {top5ArrearsStudents.map((st, idx) => {
+                          const totalAllArrears = metrics.totalArrears || 1;
+                          const shareOfTotalPct =
+                            Math.round((st.totalBalance / totalAllArrears) * 1000) / 10;
+
+                          return (
+                            <tr
+                              key={st.id}
+                              className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40"
+                            >
+                              <td className="py-3 pr-3 align-middle">
+                                <span
+                                  className={`inline-flex h-6 w-6 items-center justify-center rounded-md font-mono text-xs font-bold ${
+                                    idx === 0
+                                      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+                                      : idx === 1
+                                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300'
+                                      : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                  }`}
+                                >
+                                  #{idx + 1}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 align-middle">
+                                <p className="font-semibold text-slate-900 dark:text-slate-100">
+                                  {st.name}
+                                </p>
+                                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                  NIS: <span className="font-mono">{st.nis}</span> · Kelas:{' '}
+                                  <span className="font-semibold">{st.className}</span> · WA:{' '}
+                                  <span className="font-mono">{st.waNumber}</span>
+                                </p>
+                              </td>
+                              <td className="px-3 py-3 text-right align-middle font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                                {formatRupiah(st.sppBalance)}
+                              </td>
+                              <td className="px-3 py-3 text-right align-middle font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                                {formatRupiah(st.dspBalance)}
+                              </td>
+                              <td className="px-3 py-3 text-right align-middle font-mono tabular-nums text-slate-700 dark:text-slate-300">
+                                {formatRupiah(st.class11Balance + st.class12Balance)}
+                              </td>
+                              <td className="px-3 py-3 text-right align-middle">
+                                <p className="font-mono font-bold tabular-nums text-red-600 dark:text-red-400">
+                                  {formatRupiah(st.totalBalance)}
+                                </p>
+                                <p className="mt-0.5 font-mono text-[10px] text-slate-500 dark:text-slate-400">
+                                  {shareOfTotalPct}% dari total piutang
+                                </p>
+                              </td>
+                              <td className="py-3 pl-3 text-right align-middle">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <a
+                                    href={buildBillingWhatsAppUrl(st, schoolSettings)}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 whitespace-nowrap shrink-0"
+                                  >
+                                    <MessageSquare className="h-3.5 w-3.5" />
+                                    <span>Tagih WA</span>
+                                  </a>
+                                  {isKasir && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setSelectedPosStudentId(st.id);
+                                        setPosPayerName(`Wali dari ${st.name}`);
+                                        setCart([]);
+                                        setActiveMenu('pos');
+                                      }}
+                                      className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 whitespace-nowrap shrink-0"
+                                    >
+                                      <ShoppingCart className="h-3.5 w-3.5" />
+                                      <span>Bayar POS</span>
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setSelectedHistoryStudentId(st.id);
+                                      setActiveMenu('history');
+                                    }}
+                                    className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 whitespace-nowrap shrink-0"
+                                  >
+                                    <FileText className="h-3.5 w-3.5" />
+                                    <span>Kartu SPP</span>
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             </div>
           )}
