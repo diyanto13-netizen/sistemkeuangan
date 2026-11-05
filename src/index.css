@@ -7,9 +7,9 @@
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   /* Proportional & comfortable typographic scale for financial operations */
-  --text-xs: 0.8125rem;     /* 13px (up from 12px for crisp table/label legibility) */
+  --text-xs: 0.8125rem;     /* 13px */
   --text-xs--line-height: 1.45;
-  --text-sm: 0.90625rem;    /* 14.5px (comfortable body, inputs & cashier buttons) */
+  --text-sm: 0.90625rem;    /* 14.5px */
   --text-sm--line-height: 1.5;
   --text-base: 1rem;        /* 16px */
   --text-base--line-height: 1.55;
@@ -22,10 +22,39 @@
 }
 
 /* ============================================================================
-   REFERENSI WARNA DASAR APLIKASI KEUANGAN (CURATED FINANCIAL THEMES)
+   TEMA WARNA DASAR SESUAI FILOSOFI LOGO SMKS PGRI 1 SUKABUMI
+   Mengubah warna aksen utama sekaligus warna dasar (latar, sidebar, kartu & garis)
    ============================================================================ */
 
-/* 1. Emerald Sovereign (Private Banking & Wealth — Default Baru) */
+/* 1. Biru Perisai Pendidikan (Filosofi Perisai Biru Logo SMKS PGRI 1) */
+html[data-accent="navy"] {
+  --color-blue-50: #f0f9ff;
+  --color-blue-100: #e0f2fe;
+  --color-blue-200: #bae6fd;
+  --color-blue-300: #7dd3fc;
+  --color-blue-400: #38bdf8;
+  --color-blue-500: #0ea5e9;
+  --color-blue-600: #0284c7;
+  --color-blue-700: #0369a1;
+  --color-blue-800: #075985;
+  --color-blue-900: #0c4a6e;
+  --color-blue-950: #082f49;
+
+  /* Warna Dasar Aplikasi (Nuansa Biru Perisai SMKS PGRI 1) */
+  --color-slate-50: #f0f7ff;
+  --color-slate-100: #e1effe;
+  --color-slate-200: #c3ddfd;
+  --color-slate-300: #94c2f8;
+  --color-slate-400: #5b8cc7;
+  --color-slate-500: #3d689e;
+  --color-slate-600: #2b4f7e;
+  --color-slate-700: #1e3a5f;
+  --color-slate-800: #152946;
+  --color-slate-900: #0d1b30;
+  --color-slate-950: #07101f;
+}
+
+/* 2. Hijau Pita Kemakmuran (Filosofi Pita Hijau & Padi Logo SMKS PGRI 1) */
 html[data-accent="emerald"] {
   --color-blue-50: #ecfdf5;
   --color-blue-100: #d1fae5;
@@ -38,39 +67,22 @@ html[data-accent="emerald"] {
   --color-blue-800: #065f46;
   --color-blue-900: #064e3b;
   --color-blue-950: #022c22;
+
+  /* Warna Dasar Aplikasi (Nuansa Hijau Zamrud SMKS PGRI 1) */
+  --color-slate-50: #eefaf4;
+  --color-slate-100: #dcf4e8;
+  --color-slate-200: #bce6d3;
+  --color-slate-300: #8ed1b4;
+  --color-slate-400: #52997c;
+  --color-slate-500: #39755d;
+  --color-slate-600: #285946;
+  --color-slate-700: #1c4233;
+  --color-slate-800: #132e24;
+  --color-slate-900: #0b1e17;
+  --color-slate-950: #05110d;
 }
 
-/* 2. Teal Sapphire (Modern Digital Treasury & Fintech) */
-html[data-accent="teal"] {
-  --color-blue-50: #f0fdfa;
-  --color-blue-100: #ccfbf1;
-  --color-blue-200: #99f6e4;
-  --color-blue-300: #5eead4;
-  --color-blue-400: #2dd4bf;
-  --color-blue-500: #14b8a6;
-  --color-blue-600: #0d9488;
-  --color-blue-700: #0f766e;
-  --color-blue-800: #115e59;
-  --color-blue-900: #134e4a;
-  --color-blue-950: #042f2e;
-}
-
-/* 3. Royal Indigo (Enterprise ERP & Executive Finance) */
-html[data-accent="indigo"] {
-  --color-blue-50: #eef2ff;
-  --color-blue-100: #e0e7ff;
-  --color-blue-200: #c7d2fe;
-  --color-blue-300: #a5b4fc;
-  --color-blue-400: #818cf8;
-  --color-blue-500: #6366f1;
-  --color-blue-600: #4f46e5;
-  --color-blue-700: #4338ca;
-  --color-blue-800: #3730a3;
-  --color-blue-900: #312e81;
-  --color-blue-950: #1e1b4b;
-}
-
-/* 4. Sovereign Amber Gold (Executive Audit & Prestige) */
+/* 3. Kuning Emas Kejayaan (Filosofi Perisai Emas & Pita Atas Logo SMKS PGRI 1) */
 html[data-accent="amber"] {
   --color-blue-50: #fffbeb;
   --color-blue-100: #fef3c7;
@@ -83,21 +95,75 @@ html[data-accent="amber"] {
   --color-blue-800: #92400e;
   --color-blue-900: #78350f;
   --color-blue-950: #451a03;
+
+  /* Warna Dasar Aplikasi (Nuansa Emas Hangat SMKS PGRI 1) */
+  --color-slate-50: #fdf9ee;
+  --color-slate-100: #f9f0d8;
+  --color-slate-200: #efe0b6;
+  --color-slate-300: #dec485;
+  --color-slate-400: #9c824c;
+  --color-slate-500: #786234;
+  --color-slate-600: #5c4924;
+  --color-slate-700: #433418;
+  --color-slate-800: #2e2310;
+  --color-slate-900: #1d1609;
+  --color-slate-950: #110c04;
 }
 
-/* 5. Classic Corporate Navy (Institutional Banking) */
-html[data-accent="navy"] {
-  --color-blue-50: #eff6ff;
-  --color-blue-100: #dbeafe;
-  --color-blue-200: #bfdbfe;
-  --color-blue-300: #93c5fd;
-  --color-blue-400: #60a5fa;
-  --color-blue-500: #3b82f6;
-  --color-blue-600: #2563eb;
-  --color-blue-700: #1d4ed8;
-  --color-blue-800: #1e40af;
-  --color-blue-900: #1e3a8a;
-  --color-blue-950: #172554;
+/* 4. Merah Obor PGRI (Filosofi Api Suluh Semangat Pengabdian Logo PGRI) */
+html[data-accent="teal"] {
+  --color-blue-50: #fef2f2;
+  --color-blue-100: #fee2e2;
+  --color-blue-200: #fecaca;
+  --color-blue-300: #fca5a5;
+  --color-blue-400: #f87171;
+  --color-blue-500: #ef4444;
+  --color-blue-600: #dc2626;
+  --color-blue-700: #b91c1c;
+  --color-blue-800: #991b1b;
+  --color-blue-900: #7f1d1d;
+  --color-blue-950: #450a0a;
+
+  /* Warna Dasar Aplikasi (Nuansa Merah Obor PGRI) */
+  --color-slate-50: #fff5f5;
+  --color-slate-100: #ffe8e8;
+  --color-slate-200: #f8c9c9;
+  --color-slate-300: #eba0a0;
+  --color-slate-400: #a66060;
+  --color-slate-500: #824646;
+  --color-slate-600: #663333;
+  --color-slate-700: #4b2424;
+  --color-slate-800: #341818;
+  --color-slate-900: #210e0e;
+  --color-slate-950: #130707;
+}
+
+/* 5. Biru Malam Roda Vokasi (Filosofi Ketegasan Roda Gigi & Perisai Dalam) */
+html[data-accent="indigo"] {
+  --color-blue-50: #eef2ff;
+  --color-blue-100: #e0e7ff;
+  --color-blue-200: #c7d2fe;
+  --color-blue-300: #a5b4fc;
+  --color-blue-400: #818cf8;
+  --color-blue-500: #6366f1;
+  --color-blue-600: #4f46e5;
+  --color-blue-700: #4338ca;
+  --color-blue-800: #3730a3;
+  --color-blue-900: #312e81;
+  --color-blue-950: #1e1b4b;
+
+  /* Warna Dasar Aplikasi (Nuansa Indigo Vokasi SMKS PGRI 1) */
+  --color-slate-50: #f3f4ff;
+  --color-slate-100: #e6e8ff;
+  --color-slate-200: #ccd0fb;
+  --color-slate-300: #a6adf4;
+  --color-slate-400: #6c73b8;
+  --color-slate-500: #4f5696;
+  --color-slate-600: #3b4178;
+  --color-slate-700: #2a2f5b;
+  --color-slate-800: #1c2041;
+  --color-slate-900: #11142b;
+  --color-slate-950: #090b19;
 }
 
 @layer base {
@@ -124,5 +190,3 @@ html[data-accent="navy"] {
     letter-spacing: -0.015em;
   }
 }
-
-

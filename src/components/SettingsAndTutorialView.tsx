@@ -5,6 +5,8 @@ import {
   Building2,
   CheckCircle2,
   CreditCard,
+  Database,
+  Download,
   Eye,
   EyeOff,
   FileSpreadsheet,
@@ -40,6 +42,9 @@ interface SettingsAndTutorialViewProps {
   onChangeAccentTheme: (theme: FinancialThemeId) => void;
   onSaveSettings: (updated: SchoolSettings) => Promise<void>;
   onToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+  onBackupJSON: () => void;
+  onBackupCSV: () => void;
+  onOpenDocsModal: () => void;
 }
 
 type SettingsTab =
@@ -48,6 +53,7 @@ type SettingsTab =
   | 'pejabat_ttd'
   | 'akun_password'
   | 'tema_warna'
+  | 'arsip_cadangan'
   | 'tutorial';
 
 export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = ({
@@ -58,6 +64,9 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
   onChangeAccentTheme,
   onSaveSettings,
   onToast,
+  onBackupJSON,
+  onBackupCSV,
+  onOpenDocsModal,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('identitas_kop');
   const [formState, setFormState] = useState<SchoolSettings>(settings);
@@ -412,7 +421,20 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
             }`}
           >
             <Palette className="h-3.5 w-3.5" />
-            <span>5. Tema Warna & Tipografi</span>
+            <span>5. Tema Warna</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('arsip_cadangan')}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              activeTab === 'arsip_cadangan'
+                ? 'bg-blue-700 text-white'
+                : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Database className="h-3.5 w-3.5" />
+            <span>6. Arsip & Cadangan Lokal</span>
           </button>
 
           <button
@@ -425,7 +447,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
             }`}
           >
             <BookOpen className="h-3.5 w-3.5" />
-            <span>6. Tutorial & Panduan Fitur</span>
+            <span>7. Tutorial & Panduan Fitur</span>
           </button>
         </div>
       </div>
@@ -1173,139 +1195,137 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
       )}
 
       {/* =====================================================================
-          TAB 5: REFERENSI TEMA WARNA DASAR & TIPOGRAFI APLIKASI KEUANGAN
+          TAB 5: REFERENSI TEMA WARNA DASAR SESUAI FILOSOFI LOGO SMKS PGRI 1
       ===================================================================== */}
       {activeTab === 'tema_warna' && (
         <div className="space-y-6">
           <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
             <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-              Referensi Warna Dasar Aplikasi Keuangan & Perbankan (Klik untuk Menerapkan)
+              Referensi Warna Dasar Aplikasi Keuangan &amp; Perbankan (Klik untuk Menerapkan)
             </h2>
             <p className="mt-1 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-              Pilih palet warna dasar yang paling sesuai dengan karakter institusi sekolah Anda.
-              Selain warna biru korporat standar, berikut adalah referensi palet warna finansial
-              kelas perbankan &amp; sistem informasi akuntansi modern:
+              Pilih tema warna dasar sesuai filosofi warna logo SMKS PGRI 1 Sukabumi untuk mengubah
+              warna dasar latar aplikasi, menu samping, dan tombol utama:
             </p>
 
-            <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {FINANCIAL_COLOR_THEMES.map((theme) => {
                 const isSelected = accentTheme === theme.id;
                 return (
-                  <div
+                  <button
                     key={theme.id}
-                    className={`flex flex-col justify-between rounded-xl border p-5 transition-all ${
+                    type="button"
+                    onClick={() => {
+                      onChangeAccentTheme(theme.id);
+                      onToast(
+                        `Tema warna dasar "${theme.name}" berhasil diterapkan.`,
+                        'success'
+                      );
+                    }}
+                    className={`flex flex-col items-center justify-center gap-3 rounded-xl border p-5 text-center transition-all ${
                       isSelected
-                        ? 'border-blue-600 bg-blue-50/40 ring-2 ring-blue-600/20 dark:border-blue-500 dark:bg-blue-950/30'
-                        : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950'
+                        ? 'border-blue-600 bg-blue-50/60 ring-2 ring-blue-600/20 dark:border-blue-400 dark:bg-blue-950/40'
+                        : 'border-slate-200 bg-white hover:border-blue-400 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:hover:border-slate-700'
                     }`}
                   >
-                    <div>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-center gap-3">
-                          <span
-                            className="h-9 w-9 shrink-0 rounded-lg border border-black/10 shadow-xs"
-                            style={{ backgroundColor: theme.primaryHex }}
-                          />
-                          <div>
-                            <h3 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                              {theme.name}
-                            </h3>
-                            <span className="font-mono text-xs text-slate-500">
-                              {theme.primaryHex} · {theme.secondaryHex}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
-                          {theme.badge}
-                        </span>
-                      </div>
-
-                      <p className="mt-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                        {theme.psychology}
-                      </p>
-
-                      <p className="mt-2 text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                        <strong>Referensi Industri:</strong> {theme.usageRef}
-                      </p>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          onChangeAccentTheme(theme.id);
-                          onToast(
-                            `Tema warna finansial "${theme.name}" (${theme.primaryHex}) berhasil diterapkan.`,
-                            'success'
-                          );
-                        }}
-                        className={`flex w-full items-center justify-center gap-1.5 rounded-lg px-3.5 py-2 text-xs font-semibold transition-colors ${
-                          isSelected
-                            ? 'bg-blue-700 text-white'
-                            : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
-                        }`}
-                      >
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        <span>
-                          {isSelected ? 'Tema Aktif Saat Ini' : `Gunakan ${theme.name}`}
-                        </span>
-                      </button>
-                    </div>
-                  </div>
+                    <span
+                      className={`h-12 w-12 shrink-0 rounded-xl border border-black/10 shadow-xs ${theme.swatchClass}`}
+                    />
+                    <span className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                      {theme.name}
+                    </span>
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-blue-700 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                        <CheckCircle2 className="h-3 w-3" />
+                        <span>Aktif</span>
+                      </span>
+                    )}
+                  </button>
                 );
               })}
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Spesifikasi Tipografi Keuangan */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+      {/* =====================================================================
+          TAB 6: ARSIP & CADANGAN LOKAL (BACKUP DATABASE & SKEMA SECURITY RULES)
+      ===================================================================== */}
+      {activeTab === 'arsip_cadangan' && (
+        <div className="rounded-xl border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
+          <div className="border-b border-slate-200 pb-4 dark:border-slate-800">
             <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
-              Standar Tipografi & Hierarki Huruf Aplikasi Keuangan
+              Arsip &amp; Cadangan Lokal Database Sekolah
             </h2>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Kombinasi 3 keluarga huruf berstandar perbankan digital yang dioptimalkan untuk
-              keterbacaan kasir dan akurasi angka:
+              Unduh salinan cadangan seluruh data siswa serta riwayat transaksi keuangan ke komputer
+              Anda dalam format JSON atau CSV, serta tinjau dokumentasi Skema &amp; Security Rules
+              Cloud Firestore.
             </p>
+          </div>
 
-            <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-3">
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
-                  1. Font Judul & Hierarki Eksekutif
-                </p>
-                <p className="mt-1 font-display text-lg font-bold text-slate-900 dark:text-slate-100">
-                  Plus Jakarta Sans
-                </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                  Geometris, modern, dan tegas untuk judul halaman, nama institusi, serta
-                  ringkasan kartu KPI eksekutif.
+          <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                  <Download className="h-4 w-4 text-blue-600" />
+                  <span>1. Backup Database Lengkap (.JSON)</span>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  Menyimpan seluruh struktur data siswa, saldo tagihan, dan riwayat transaksi dalam
+                  satu berkas arsip JSON.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={onBackupJSON}
+                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg bg-blue-700 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-800"
+              >
+                <Download className="h-3.5 w-3.5" />
+                <span>Backup JSON</span>
+              </button>
+            </div>
 
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
-                  2. Font Antarmuka, Form & Tabel Kasir
-                </p>
-                <p className="mt-1 font-sans text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  Inter (OpenType cv02/tnum)
-                </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                  Standar emas aplikasi fintech dunia. Memiliki x-height tinggi sehingga sangat
-                  tajam pada ukuran 13px–15px di tabel Buku Kas &amp; POS.
+            <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                  <Database className="h-4 w-4 text-blue-600" />
+                  <span>2. Backup Tabel Spreadsheet (.CSV)</span>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  Mengunduh arsip data dalam format CSV yang dapat langsung dibuka menggunakan
+                  Microsoft Excel atau Google Sheets.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={onBackupCSV}
+                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <Database className="h-3.5 w-3.5" />
+                <span>Backup CSV</span>
+              </button>
+            </div>
 
-              <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
-                <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">
-                  3. Font Nominal Rupiah, NIS & Kuitansi
-                </p>
-                <p className="mt-1 font-mono text-lg font-bold tabular-nums text-slate-900 dark:text-slate-100">
-                  JetBrains Mono (Rp 3.600.000)
-                </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-400">
-                  Setiap digit angka memiliki lebar identik (tabular-nums) agar ribuan dan
-                  jutaan rupiah sejajar sempurna secara vertikal.
+            <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-950">
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-slate-100">
+                  <BookOpen className="h-4 w-4 text-blue-600" />
+                  <span>3. Skema &amp; Security Rules</span>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  Lihat dokumentasi arsitektur koleksi Cloud Firestore dan aturan keamanan akses data
+                  sekolah.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={onOpenDocsModal}
+                className="mt-4 flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+              >
+                <BookOpen className="h-3.5 w-3.5 text-blue-600" />
+                <span>Skema &amp; Security Rules</span>
+              </button>
             </div>
           </div>
         </div>

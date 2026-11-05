@@ -2793,44 +2793,9 @@ export default function App() {
           </nav>
         </div>
 
-        {/* Backup Database & User Footer */}
-        <div className="space-y-3 border-t border-slate-200 p-4 dark:border-slate-800">
-          <div className="space-y-1.5">
-            <p className="text-[11px] font-semibold tracking-wider text-slate-400 uppercase">
-              Arsip & Cadangan Lokal
-            </p>
-            <div className="grid grid-cols-2 gap-1.5">
-              <button
-                onClick={() => {
-                  downloadDatabaseBackupJSON(students, transactions);
-                  showToast('Backup Database (.json) berhasil diunduh.', 'success');
-                }}
-                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 whitespace-nowrap shrink-0"
-              >
-                <Download className="h-3.5 w-3.5" />
-                <span>Backup JSON</span>
-              </button>
-              <button
-                onClick={() => {
-                  downloadDatabaseBackupCSV(students, transactions);
-                  showToast('Backup Database (.csv) berhasil diunduh.', 'success');
-                }}
-                className="flex items-center justify-center gap-1 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 whitespace-nowrap shrink-0"
-              >
-                <Database className="h-3.5 w-3.5" />
-                <span>Backup CSV</span>
-              </button>
-            </div>
-            <button
-              onClick={() => setDocsModalOpen(true)}
-              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 whitespace-nowrap shrink-0"
-            >
-              <BookOpen className="h-3.5 w-3.5 text-blue-600" />
-              <span>Skema & Security Rules</span>
-            </button>
-          </div>
-
-          <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-800">
+        {/* User Footer */}
+        <div className="border-t border-slate-200 p-4 dark:border-slate-800">
+          <div className="flex items-center justify-between">
             <div className="min-w-0 pr-2">
               <p className="truncate text-xs font-semibold text-slate-900 dark:text-slate-100">
                 {isKasir ? schoolSettings.cashierName : schoolSettings.principalName}
@@ -2973,13 +2938,12 @@ export default function App() {
                     setAccentTheme(theme.id);
                     showToast(`Tema warna "${theme.name}" diaktifkan.`, 'info');
                   }}
-                  title={`${theme.name} (${theme.badge})`}
-                  className={`h-4 w-4 rounded-full border transition-transform ${
+                  title={theme.name}
+                  className={`h-4 w-4 rounded-full border transition-transform ${theme.swatchClass} ${
                     accentTheme === theme.id
                       ? 'scale-125 border-slate-900 ring-2 ring-slate-400 dark:border-white'
                       : 'border-black/15 opacity-75 hover:opacity-100'
                   }`}
-                  style={{ backgroundColor: theme.primaryHex }}
                 />
               ))}
             </div>
@@ -4881,31 +4845,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Banner Informasi Rekening Transfer Bank pada Pesan WhatsApp Penagihan */}
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3 dark:border-emerald-900/60 dark:bg-emerald-950/25">
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
-                    <CreditCard className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-emerald-950 dark:text-emerald-100">
-                      Rekening Resmi Sekolah untuk Pembayaran Transfer (Tercantum Otomatis di WhatsApp):
-                    </p>
-                    <p className="mt-0.5 text-xs text-emerald-800 dark:text-emerald-300">
-                      Bank: <span className="font-bold">{schoolSettings.bankName || 'Bank BRI'}</span> • No. Rekening:{' '}
-                      <span className="font-mono font-extrabold tracking-wide text-emerald-950 dark:text-emerald-100">
-                        {schoolSettings.bankAccountNo || '0092-0101-11495-39'}
-                      </span>{' '}
-                      • a.n <span className="font-bold">{schoolSettings.bankAccountHolder || 'SMK PGRI 1'}</span>
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
-                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                  <span>Format Penagihan WhatsApp Siap Kirim</span>
-                </div>
-              </div>
-
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
                 <div className="overflow-x-auto">
                   <table className="w-full border-collapse text-left text-xs">
@@ -5238,6 +5177,15 @@ export default function App() {
               onChangeAccentTheme={setAccentTheme}
               onSaveSettings={handleSaveSchoolSettings}
               onToast={showToast}
+              onBackupJSON={() => {
+                downloadDatabaseBackupJSON(students, transactions);
+                showToast('Backup Database (.json) berhasil diunduh.', 'success');
+              }}
+              onBackupCSV={() => {
+                downloadDatabaseBackupCSV(students, transactions);
+                showToast('Backup Database (.csv) berhasil diunduh.', 'success');
+              }}
+              onOpenDocsModal={() => setDocsModalOpen(true)}
             />
           )}
         </main>

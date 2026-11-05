@@ -2,7 +2,7 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'kasir' | 'kepsek';
 
-export type FinancialThemeId = 'emerald' | 'teal' | 'indigo' | 'amber' | 'navy';
+export type FinancialThemeId = 'navy' | 'emerald' | 'amber' | 'teal' | 'indigo';
 
 export interface FinancialColorTheme {
   id: FinancialThemeId;
@@ -18,64 +18,59 @@ export interface FinancialColorTheme {
 
 export const FINANCIAL_COLOR_THEMES: FinancialColorTheme[] = [
   {
+    id: 'navy',
+    name: 'Biru Perisai Pendidikan',
+    badge: 'Filosofi Logo SMKS PGRI 1',
+    primaryHex: '#0284C7',
+    secondaryHex: '#0369A1',
+    surfaceHex: '#F0F7FF',
+    swatchClass: 'bg-[#0284C7]',
+    psychology: 'Warna dasar perisai biru langit logo SMKS PGRI 1 Sukabumi.',
+    usageRef: 'Perisai Utama Logo SMKS PGRI 1 Sukabumi',
+  },
+  {
     id: 'emerald',
-    name: 'Emerald Sovereign',
-    badge: 'Direkomendasikan (Default Baru)',
+    name: 'Hijau Pita Kemakmuran',
+    badge: 'Filosofi Logo SMKS PGRI 1',
     primaryHex: '#047857',
-    secondaryHex: '#065f46',
-    surfaceHex: '#ECFDF5',
+    secondaryHex: '#065F46',
+    surfaceHex: '#EEFAF4',
     swatchClass: 'bg-[#047857]',
-    psychology:
-      'Melambangkan pertumbuhan kas, kemakmuran institusi, stabilitas, dan keseimbangan akuntansi. Sangat nyaman di mata kasir untuk pemakaian jangka panjang.',
-    usageRef: 'Private Banking, Wealth Management, & Sistem Kas Institusi Modern',
-  },
-  {
-    id: 'teal',
-    name: 'Teal Sapphire Fintech',
-    badge: 'Modern Treasury',
-    primaryHex: '#0F766E',
-    secondaryHex: '#115E59',
-    surfaceHex: '#F0FDFA',
-    swatchClass: 'bg-[#0F766E]',
-    psychology:
-      'Perpaduan ketenangan biru dan ketajaman hijau zamrud. Memberikan kontras tinggi pada tabel buku kas, angka rupiah, dan status pembayaran.',
-    usageRef: 'Fintech Korporat, Digital Treasury, & Dashboard Analitik Keuangan',
-  },
-  {
-    id: 'indigo',
-    name: 'Executive Royal Indigo',
-    badge: 'Enterprise ERP',
-    primaryHex: '#4338CA',
-    secondaryHex: '#3730A3',
-    surfaceHex: '#EEF2FF',
-    swatchClass: 'bg-[#4338CA]',
-    psychology:
-      'Mencerminkan integritas sistem, presisi teknologi finansial, dan kewibawaan manajerial tingkat eksekutif.',
-    usageRef: 'Sistem ERP Pemerintahan, Stripe Financial Suite, & Perbankan Digital',
+    psychology: 'Warna pita hijau & padi kemakmuran logo SMKS PGRI 1 Sukabumi.',
+    usageRef: 'Pita Bawah & Padi Logo SMKS PGRI 1 Sukabumi',
   },
   {
     id: 'amber',
-    name: 'Sovereign Amber Gold',
-    badge: 'Executive Prestige',
-    primaryHex: '#B45309',
-    secondaryHex: '#92400E',
-    surfaceHex: '#FFFBEB',
-    swatchClass: 'bg-[#B45309]',
-    psychology:
-      'Nuansa emas-perunggu formal yang berpadu dengan latar slate/grafit, menghadirkan kesan eksklusif, prestisius, dan audit resmi.',
-    usageRef: 'Lembaga Keuangan Eksekutif, Audit Internal, & Yayasan Pendidikan',
+    name: 'Kuning Emas Kejayaan',
+    badge: 'Filosofi Logo SMKS PGRI 1',
+    primaryHex: '#D97706',
+    secondaryHex: '#B45309',
+    surfaceHex: '#FDF9EE',
+    swatchClass: 'bg-[#D97706]',
+    psychology: 'Warna bingkai perisai & pita kuning emas logo SMKS PGRI 1 Sukabumi.',
+    usageRef: 'Bingkai Perisai & Pita Atas Logo SMKS PGRI 1 Sukabumi',
   },
   {
-    id: 'navy',
-    name: 'Classic Corporate Navy',
-    badge: 'Warna Default Sebelumnya',
-    primaryHex: '#1D4ED8',
-    secondaryHex: '#1E40AF',
-    surfaceHex: '#EFF6FF',
-    swatchClass: 'bg-[#1D4ED8]',
-    psychology:
-      'Biru korporat klasik yang melambangkan keamanan, kepatuhan prosedur, dan kepercayaan publik.',
-    usageRef: 'Perbankan Konvensional & Administrasi Tata Usaha',
+    id: 'teal',
+    name: 'Merah Obor Semangat PGRI',
+    badge: 'Filosofi Logo SMKS PGRI 1',
+    primaryHex: '#DC2626',
+    secondaryHex: '#B91C1C',
+    surfaceHex: '#FFF5F5',
+    swatchClass: 'bg-[#DC2626]',
+    psychology: 'Warna nyala api obor suluh pengabdian pada lambang PGRI.',
+    usageRef: 'Api Obor Suluh Logo SMKS PGRI 1 Sukabumi',
+  },
+  {
+    id: 'indigo',
+    name: 'Biru Tua Roda Vokasi',
+    badge: 'Filosofi Logo SMKS PGRI 1',
+    primaryHex: '#4338CA',
+    secondaryHex: '#3730A3',
+    surfaceHex: '#F3F4FF',
+    swatchClass: 'bg-[#4338CA]',
+    psychology: 'Warna garis tegas perisai & roda gigi teknik kejuruan SMKS PGRI 1.',
+    usageRef: 'Roda Gigi & Struktur Perisai Logo SMKS PGRI 1 Sukabumi',
   },
 ];
 

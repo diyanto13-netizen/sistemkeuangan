@@ -19,11 +19,11 @@ interface SppTrendChartProps {
 }
 
 const CHART_PALETTE: Record<string, { bar: string; hover: string; darkBar: string; darkHover: string }> = {
+  navy: { bar: '#0284c7', hover: '#0369a1', darkBar: '#38bdf8', darkHover: '#7dd3fc' },
   emerald: { bar: '#047857', hover: '#065f46', darkBar: '#10b981', darkHover: '#34d399' },
-  teal: { bar: '#0f766e', hover: '#115e59', darkBar: '#14b8a6', darkHover: '#2dd4bf' },
+  amber: { bar: '#d97706', hover: '#b45309', darkBar: '#f59e0b', darkHover: '#fbbf24' },
+  teal: { bar: '#dc2626', hover: '#b91c1c', darkBar: '#ef4444', darkHover: '#f87171' },
   indigo: { bar: '#4338ca', hover: '#3730a3', darkBar: '#6366f1', darkHover: '#818cf8' },
-  amber: { bar: '#b45309', hover: '#92400e', darkBar: '#f59e0b', darkHover: '#fbbf24' },
-  navy: { bar: '#1d4ed8', hover: '#1e40af', darkBar: '#3b82f6', darkHover: '#60a5fa' },
 };
 
 export const SppTrendChart: React.FC<SppTrendChartProps> = ({
