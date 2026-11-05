@@ -194,6 +194,10 @@ export default function App() {
   });
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
+      if (!localStorage.getItem('smks_pgri1_tx_purged_v2')) {
+        localStorage.removeItem('smks_pgri1_transactions_cache');
+        return [];
+      }
       const cached = localStorage.getItem('smks_pgri1_transactions_cache');
       if (cached) return JSON.parse(cached) as Transaction[];
     } catch {
@@ -633,23 +637,69 @@ export default function App() {
     const unsubTx = onSnapshot(
       txQuery,
       async (snapshot) => {
-        const rawCloudTxs: Transaction[] = snapshot.docs.map((d) => {
-          const data = d.data() as Omit<Transaction, 'id'>;
-          const sppAmount = Math.max(0, Math.round(Number(data.sppAmount) || 0));
-          const dspAmount = Math.max(0, Math.round(Number(data.dspAmount) || 0));
-          const class11Amount = Math.max(0, Math.round(Number(data.class11Amount) || 0));
-          const class12Amount = Math.max(0, Math.round(Number(data.class12Amount) || 0));
-          return {
-            id: d.id,
-            ...data,
-            sppAmount,
-            dspAmount,
-            class11Amount,
-            class12Amount,
-            totalAmount: sppAmount + dspAmount + class11Amount + class12Amount,
-            sppMonths: Array.from(new Set(data.sppMonths || [])).slice(0, 12),
-          };
+        // Bersihkan seluruh data transaksi lama / sampel dari Cloud Firestore & cache lokal
+        const hasPurgedV2 = localStorage.getItem('smks_pgri1_tx_purged_v2') === 'true';
+        const sampleReceipts = new Set(['KWT-202610-001', 'KWT-202610-002', 'KWT-202610-003']);
+
+        if (!hasPurgedV2) {
+          localStorage.setItem('smks_pgri1_tx_purged_v2', 'true');
+          localStorage.removeItem('smks_pgri1_transactions_cache');
+          setTransactions([]);
+          if (snapshot.docs.length > 0) {
+            try {
+              const CHUNK_SIZE = 400;
+              for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
+                const chunk = snapshot.docs.slice(i, i + CHUNK_SIZE);
+                const batch = writeBatch(db);
+                chunk.forEach((docSnap) => {
+                  batch.delete(doc(db, 'transactions', docSnap.id));
+                });
+                await batch.commit();
+              }
+            } catch (purgeErr) {
+              console.warn('Purge existing transactions warning:', purgeErr);
+            }
+          }
+          return;
+        }
+
+        // Hapus otomatis jika masih ada dokumen transaksi sampel di Firestore
+        const seedDocs = snapshot.docs.filter((d) => {
+          const rNo = String(d.data().receiptNo || '');
+          return d.id.startsWith('tx_seed_') || sampleReceipts.has(rNo);
         });
+        if (seedDocs.length > 0) {
+          try {
+            const batch = writeBatch(db);
+            seedDocs.forEach((d) => batch.delete(doc(db, 'transactions', d.id)));
+            await batch.commit();
+          } catch {
+            // ignore
+          }
+        }
+
+        const rawCloudTxs: Transaction[] = snapshot.docs
+          .filter((d) => {
+            const rNo = String(d.data().receiptNo || '');
+            return !d.id.startsWith('tx_seed_') && !sampleReceipts.has(rNo);
+          })
+          .map((d) => {
+            const data = d.data() as Omit<Transaction, 'id'>;
+            const sppAmount = Math.max(0, Math.round(Number(data.sppAmount) || 0));
+            const dspAmount = Math.max(0, Math.round(Number(data.dspAmount) || 0));
+            const class11Amount = Math.max(0, Math.round(Number(data.class11Amount) || 0));
+            const class12Amount = Math.max(0, Math.round(Number(data.class12Amount) || 0));
+            return {
+              id: d.id,
+              ...data,
+              sppAmount,
+              dspAmount,
+              class11Amount,
+              class12Amount,
+              totalAmount: sppAmount + dspAmount + class11Amount + class12Amount,
+              sppMonths: Array.from(new Set(data.sppMonths || [])).slice(0, 12),
+            };
+          });
 
         // Deduplikasi transaksi berdasarkan ID dan Nomor Kwitansi (receiptNo)
         const uniqueTxMap = new Map<string, Transaction>();
@@ -660,26 +710,7 @@ export default function App() {
             seenReceipts.add(tx.receiptNo);
           }
         });
-        const cloudTxs = Array.from(uniqueTxMap.values());
-
-        let mergedTxs = [...cloudTxs];
-        if (!hasBackfilledTxRef.current) {
-          hasBackfilledTxRef.current = true;
-          if (cloudTxs.length === 0) {
-            try {
-              const rawLocalTxs = localStorage.getItem('smks_pgri1_transactions_cache');
-              const localTxs: Transaction[] = rawLocalTxs ? JSON.parse(rawLocalTxs) : [];
-              const unsyncedTxs = localTxs.filter(
-                (lt) => lt.id && !uniqueTxMap.has(lt.id) && !seenReceipts.has(lt.receiptNo)
-              );
-              if (unsyncedTxs.length > 0) {
-                mergedTxs = [...unsyncedTxs];
-              }
-            } catch {
-              // ignore
-            }
-          }
-        }
+        const mergedTxs = Array.from(uniqueTxMap.values());
 
         mergedTxs.sort((a, b) => {
           const dateCmp = b.txDate.localeCompare(a.txDate);
@@ -3328,53 +3359,41 @@ export default function App() {
                       <Search className="absolute top-2.5 left-3 h-4 w-4 text-slate-400" />
                       <input
                         type="text"
+                        list="pos-students-datalist"
                         value={posSearchQuery}
-                        onChange={(e) => setPosSearchQuery(e.target.value)}
-                        placeholder="Ketik NIS, Nama Siswa, atau Kelas (misal: 20261001 / Rizky / X TKJ)..."
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPosSearchQuery(val);
+                          const q = val.trim().toLowerCase();
+                          if (!q) {
+                            setSelectedPosStudentId('');
+                            return;
+                          }
+                          const matched = students.find(
+                            (s) =>
+                              `${s.nis} - ${s.name} (${s.className})`.toLowerCase() === q ||
+                              s.nis.toLowerCase() === q ||
+                              s.name.toLowerCase() === q ||
+                              s.nis.toLowerCase().includes(q) ||
+                              s.name.toLowerCase().includes(q)
+                          );
+                          if (matched && matched.id !== selectedPosStudentId) {
+                            setSelectedPosStudentId(matched.id);
+                            setPosPayerName(`Wali dari ${matched.name}`);
+                            setCart([]);
+                          }
+                        }}
+                        placeholder="Ketik NIS, Nama Siswa, atau Kelas..."
                         className="w-full rounded-lg border border-slate-300 bg-white py-2 pr-4 pl-9 text-sm text-slate-900 focus:border-blue-600 focus:outline-none dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
                       />
-                    </div>
-
-                    <div className="mt-3 max-h-48 overflow-y-auto divide-y divide-slate-200 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                      {filteredPosStudents.length === 0 ? (
-                        <div className="p-4 text-center text-xs text-slate-500">
-                          Data siswa tidak ditemukan. Silakan daftarkan di menu Master Data
-                          Siswa.
-                        </div>
-                      ) : (
-                        filteredPosStudents.map((st) => {
-                          const isSelected = st.id === selectedPosStudentId;
-                          return (
-                            <button
-                              key={st.id}
-                              type="button"
-                              onClick={() => {
-                                setSelectedPosStudentId(st.id);
-                                setPosPayerName(`Wali dari ${st.name}`);
-                                setCart([]);
-                              }}
-                              className={`flex w-full items-center justify-between px-4 py-2.5 text-left text-xs transition-colors ${
-                                isSelected
-                                  ? 'bg-blue-50 text-blue-950 dark:bg-blue-950/60 dark:text-blue-200'
-                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
-                              }`}
-                            >
-                              <div>
-                                <span className="font-mono font-semibold">{st.nis}</span>
-                                <span className="mx-2">·</span>
-                                <span className="font-semibold">{st.name}</span>
-                                <span className="mx-2 text-slate-400">·</span>
-                                <span className="text-slate-500 dark:text-slate-400">
-                                  {st.className}
-                                </span>
-                              </div>
-                              <span className="font-mono font-semibold tabular-nums">
-                                Sisa: {formatRupiah(st.totalBalance)}
-                              </span>
-                            </button>
-                          );
-                        })
-                      )}
+                      <datalist id="pos-students-datalist">
+                        {students.map((st) => (
+                          <option
+                            key={st.id}
+                            value={`${st.nis} - ${st.name} (${st.className})`}
+                          />
+                        ))}
+                      </datalist>
                     </div>
 
                     {/* Ringkasan Saldo Siswa Terpilih */}
