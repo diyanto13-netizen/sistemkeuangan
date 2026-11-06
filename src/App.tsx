@@ -924,6 +924,22 @@ export default function App() {
         await batch.commit();
       }
 
+      for (let i = 0; i < transactions.length; i += CHUNK_SIZE) {
+        const chunk = transactions.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((t) => {
+          const tRef = doc(db, 'transactions', t.id);
+          const { id: _, ...payload } = t;
+          batch.set(tRef, {
+            ...payload,
+            createdBy: SCHOOL_CLOUD_TENANT_ID,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+
       const settingsRef = doc(db, 'settings', SCHOOL_CLOUD_TENANT_ID);
       await setDoc(settingsRef, {
         ...schoolSettings,
