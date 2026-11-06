@@ -11,9 +11,12 @@ import {
   collection,
   deleteDoc,
   doc,
+  DocumentData,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
+  QueryDocumentSnapshot,
   runTransaction,
   serverTimestamp,
   setDoc,
@@ -185,21 +188,51 @@ export default function App() {
   // ===========================================================================
   const [students, setStudents] = useState<Student[]>(() => {
     try {
+      const sampleStudentNis = new Set(['20261001', '20251102', '20241203', '20241204']);
       const cached = localStorage.getItem('smks_pgri1_students_cache');
-      if (cached) return JSON.parse(cached) as Student[];
+      if (cached) {
+        const list = JSON.parse(cached) as Student[];
+        return list.filter(
+          (s) =>
+            !sampleStudentNis.has(s.nis) &&
+            !s.id.startsWith('std_20261001_') &&
+            !s.id.startsWith('std_20251102_') &&
+            !s.id.startsWith('std_20241203_') &&
+            !s.id.startsWith('std_20241204_')
+        );
+      }
     } catch {
       // ignore
     }
     return [];
   });
+  const studentsRef = useRef<Student[]>(students);
+  useEffect(() => {
+    studentsRef.current = students;
+  }, [students]);
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
-      if (!localStorage.getItem('smks_pgri1_tx_purged_v2')) {
-        localStorage.removeItem('smks_pgri1_transactions_cache');
-        return [];
-      }
+      const sampleReceiptPrefixes = ['KWT-202610-', 'tx_seed_'];
+      const sampleReceipts = new Set(['KWT-202610-001', 'KWT-202610-002', 'KWT-202610-003']);
+      const sampleStudentNis = new Set(['20261001', '20251102', '20241203', '20241204']);
       const cached = localStorage.getItem('smks_pgri1_transactions_cache');
-      if (cached) return JSON.parse(cached) as Transaction[];
+      if (cached) {
+        const list = JSON.parse(cached) as Transaction[];
+        return list.filter((t) => {
+          const rNo = t.receiptNo || '';
+          const sNis = t.studentNis || '';
+          const isSample =
+            t.id.startsWith('tx_seed_') ||
+            sampleReceipts.has(rNo) ||
+            sampleReceiptPrefixes.some((p) => rNo.startsWith(p)) ||
+            sampleStudentNis.has(sNis) ||
+            t.studentId.startsWith('std_20261001_') ||
+            t.studentId.startsWith('std_20251102_') ||
+            t.studentId.startsWith('std_20241203_') ||
+            t.studentId.startsWith('std_20241204_');
+          return !isSample;
+        });
+      }
     } catch {
       // ignore
     }
@@ -270,6 +303,7 @@ export default function App() {
   const [studentSearch, setStudentSearch] = useState<string>('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState<boolean>(false);
+  const [confirmClearAllModalOpen, setConfirmClearAllModalOpen] = useState<boolean>(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [nisForm, setNisForm] = useState<string>('');
   const [nameForm, setNameForm] = useState<string>('');
@@ -545,14 +579,38 @@ export default function App() {
           };
         });
 
+        // Bersihkan data sampel bawaan jika masih ada di Firestore atau cache
+        const sampleStudentNis = new Set(['20261001', '20251102', '20241203', '20241204']);
+        const hasPurgedSampleStudents = localStorage.getItem('smks_pgri1_sample_students_purged') === 'true';
+
+        if (!hasPurgedSampleStudents) {
+          localStorage.setItem('smks_pgri1_sample_students_purged', 'true');
+          const sampleDocs = snapshot.docs.filter((d) => {
+            const data = d.data();
+            const nis = String(data.nis || '');
+            return d.id.startsWith('std_20261001_') || d.id.startsWith('std_20251102_') || d.id.startsWith('std_20241203_') || d.id.startsWith('std_20241204_') || sampleStudentNis.has(nis);
+          });
+          if (sampleDocs.length > 0) {
+            try {
+              const batch = writeBatch(db);
+              sampleDocs.forEach((d) => batch.delete(doc(db, 'students', d.id)));
+              await batch.commit();
+            } catch {
+              // ignore
+            }
+          }
+        }
+
         // Deduplikasi otomatis berdasarkan NIS agar tidak pernah terjadi data siswa ganda
         const uniqueByNis = new Map<string, Student>();
-        rawCloudList.forEach((st) => {
-          const key = (st.nis || st.id).trim().toLowerCase();
-          if (!uniqueByNis.has(key)) {
-            uniqueByNis.set(key, st);
-          }
-        });
+        rawCloudList
+          .filter((st) => !sampleStudentNis.has(st.nis) && !st.id.startsWith('std_20261001_') && !st.id.startsWith('std_20251102_') && !st.id.startsWith('std_20241203_') && !st.id.startsWith('std_20241204_'))
+          .forEach((st) => {
+            const key = (st.nis || st.id).trim().toLowerCase();
+            if (!uniqueByNis.has(key)) {
+              uniqueByNis.set(key, st);
+            }
+          });
         const cloudList = Array.from(uniqueByNis.values());
 
         // Auto-Backfill dari localStorage HANYA jika Cloud Firestore benar-benar masih kosong (0 dokumen),
@@ -567,6 +625,9 @@ export default function App() {
               const seenLocalNis = new Set<string>();
               const unsyncedLocal = localStudents.filter((ls) => {
                 if (!ls.nis) return false;
+                if (sampleStudentNis.has(ls.nis) || ls.id.startsWith('std_20261001_') || ls.id.startsWith('std_20251102_') || ls.id.startsWith('std_20241203_') || ls.id.startsWith('std_20241204_')) {
+                  return false;
+                }
                 const key = ls.nis.trim().toLowerCase();
                 if (seenLocalNis.has(key)) return false;
                 seenLocalNis.add(key);
@@ -624,6 +685,7 @@ export default function App() {
         }
 
         mergedList.sort((a, b) => a.nis.localeCompare(b.nis));
+        studentsRef.current = mergedList;
         setStudents(mergedList);
         saveStudentsCache(mergedList);
         setDataLoading(false);
@@ -637,37 +699,28 @@ export default function App() {
     const unsubTx = onSnapshot(
       txQuery,
       async (snapshot) => {
-        // Bersihkan seluruh data transaksi lama / sampel dari Cloud Firestore & cache lokal
-        const hasPurgedV2 = localStorage.getItem('smks_pgri1_tx_purged_v2') === 'true';
+        // Bersihkan seluruh transaksi sampel dan transaksi dummy yang pernah ada di Firestore & cache lokal
+        const sampleReceiptPrefixes = ['KWT-202610-', 'tx_seed_'];
         const sampleReceipts = new Set(['KWT-202610-001', 'KWT-202610-002', 'KWT-202610-003']);
+        const sampleStudentNis = new Set(['20261001', '20251102', '20241203', '20241204']);
 
-        if (!hasPurgedV2) {
-          localStorage.setItem('smks_pgri1_tx_purged_v2', 'true');
-          localStorage.removeItem('smks_pgri1_transactions_cache');
-          setTransactions([]);
-          if (snapshot.docs.length > 0) {
-            try {
-              const CHUNK_SIZE = 400;
-              for (let i = 0; i < snapshot.docs.length; i += CHUNK_SIZE) {
-                const chunk = snapshot.docs.slice(i, i + CHUNK_SIZE);
-                const batch = writeBatch(db);
-                chunk.forEach((docSnap) => {
-                  batch.delete(doc(db, 'transactions', docSnap.id));
-                });
-                await batch.commit();
-              }
-            } catch (purgeErr) {
-              console.warn('Purge existing transactions warning:', purgeErr);
-            }
-          }
-          return;
-        }
-
-        // Hapus otomatis jika masih ada dokumen transaksi sampel di Firestore
+        // Deteksi transaksi sampel berdasarkan ID, format kuitansi, atau NIS siswa sampel
         const seedDocs = snapshot.docs.filter((d) => {
           const rNo = String(d.data().receiptNo || '');
-          return d.id.startsWith('tx_seed_') || sampleReceipts.has(rNo);
+          const sNis = String(d.data().studentNis || '');
+          const sId = String(d.data().studentId || '');
+          return (
+            d.id.startsWith('tx_seed_') ||
+            sampleReceipts.has(rNo) ||
+            sampleReceiptPrefixes.some((p) => rNo.startsWith(p)) ||
+            sampleStudentNis.has(sNis) ||
+            sId.startsWith('std_20261001_') ||
+            sId.startsWith('std_20251102_') ||
+            sId.startsWith('std_20241203_') ||
+            sId.startsWith('std_20241204_')
+          );
         });
+
         if (seedDocs.length > 0) {
           try {
             const batch = writeBatch(db);
@@ -681,7 +734,18 @@ export default function App() {
         const rawCloudTxs: Transaction[] = snapshot.docs
           .filter((d) => {
             const rNo = String(d.data().receiptNo || '');
-            return !d.id.startsWith('tx_seed_') && !sampleReceipts.has(rNo);
+            const sNis = String(d.data().studentNis || '');
+            const sId = String(d.data().studentId || '');
+            const isSample =
+              d.id.startsWith('tx_seed_') ||
+              sampleReceipts.has(rNo) ||
+              sampleReceiptPrefixes.some((p) => rNo.startsWith(p)) ||
+              sampleStudentNis.has(sNis) ||
+              sId.startsWith('std_20261001_') ||
+              sId.startsWith('std_20251102_') ||
+              sId.startsWith('std_20241203_') ||
+              sId.startsWith('std_20241204_');
+            return !isSample;
           })
           .map((d) => {
             const data = d.data() as Omit<Transaction, 'id'>;
@@ -710,7 +774,40 @@ export default function App() {
             seenReceipts.add(tx.receiptNo);
           }
         });
-        const mergedTxs = Array.from(uniqueTxMap.values());
+
+        // Filter tambahan: Jika database siswa sudah kosong (0 siswa), maka transaksi otomatis kosong (0 kuitansi)
+        // dan jika ada kuitansi milik siswa yang sudah tidak ada, hapus otomatis dari tampilan & cloud
+        let mergedTxs = Array.from(uniqueTxMap.values());
+        const activeStudents = studentsRef.current;
+        if (activeStudents.length === 0 && mergedTxs.length > 0) {
+          // Seluruh siswa sudah dihapus, maka transaksi lama juga harus dibersihkan
+          try {
+            const batch = writeBatch(db);
+            mergedTxs.forEach((t) => batch.delete(doc(db, 'transactions', t.id)));
+            batch.commit();
+          } catch {
+            // ignore
+          }
+          mergedTxs = [];
+        } else if (activeStudents.length > 0) {
+          const validStudentIds = new Set(activeStudents.map((s) => s.id));
+          const validStudentNis = new Set(activeStudents.map((s) => s.nis.trim().toLowerCase()));
+          const orphanTxs = mergedTxs.filter(
+            (t) => !validStudentIds.has(t.studentId) && !validStudentNis.has(t.studentNis.trim().toLowerCase())
+          );
+          if (orphanTxs.length > 0) {
+            try {
+              const batch = writeBatch(db);
+              orphanTxs.forEach((t) => batch.delete(doc(db, 'transactions', t.id)));
+              batch.commit();
+            } catch {
+              // ignore
+            }
+          }
+          mergedTxs = mergedTxs.filter(
+            (t) => validStudentIds.has(t.studentId) || validStudentNis.has(t.studentNis.trim().toLowerCase())
+          );
+        }
 
         mergedTxs.sort((a, b) => {
           const dateCmp = b.txDate.localeCompare(a.txDate);
@@ -1396,14 +1493,34 @@ export default function App() {
 
   const handleDeleteStudent = async (st: Student) => {
     if (!currentUser || !isKasir) return;
-    setBusyAction(`Menghapus data ${st.name}...`);
+    setBusyAction(`Menghapus data ${st.name} dan seluruh riwayat transaksinya...`);
     try {
       const nextStudents = students.filter((s) => s.id !== st.id);
+      const nextTxs = transactions.filter((t) => t.studentId !== st.id && t.studentNis !== st.nis);
       setStudents(nextStudents);
       saveStudentsCache(nextStudents);
+      setTransactions(nextTxs);
+      saveTransactionsCache(nextTxs);
       setSelectedStudentIds((prev) => prev.filter((id) => id !== st.id));
+
+      // Hapus dokumen siswa dari Firestore
       await deleteDoc(doc(db, 'students', st.id));
-      showToast(`Data siswa ${st.name} telah dihapus.`, 'info');
+
+      // Hapus seluruh transaksi milik siswa ini di Firestore agar tidak tertinggal menjadi kuitansi yatim
+      const relatedTxSnap = await getDocs(
+        query(
+          collection(db, 'transactions'),
+          where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID),
+          where('studentId', '==', st.id)
+        )
+      );
+      if (relatedTxSnap.docs.length > 0) {
+        const batch = writeBatch(db);
+        relatedTxSnap.docs.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(doc(db, 'transactions', d.id)));
+        await batch.commit();
+      }
+
+      showToast(`Data siswa ${st.name} beserta seluruh riwayat pembayarannya telah dihapus.`, 'info');
       if (editingStudent?.id === st.id) resetStudentForm();
     } catch (error) {
       console.warn('Firestore student delete fallback to local cache:', error);
@@ -1443,11 +1560,14 @@ export default function App() {
     const deleteSet = new Set(idsToDelete);
     const count = idsToDelete.length;
 
-    setBusyAction(`Menghapus ${count} data siswa yang ditandai ceklis...`);
+    setBusyAction(`Menghapus ${count} data siswa beserta transaksi pembayarannya...`);
     try {
       const nextStudents = students.filter((s) => !deleteSet.has(s.id));
+      const nextTxs = transactions.filter((t) => !deleteSet.has(t.studentId));
       setStudents(nextStudents);
       saveStudentsCache(nextStudents);
+      setTransactions(nextTxs);
+      saveTransactionsCache(nextTxs);
       setSelectedStudentIds([]);
       setConfirmBulkDeleteOpen(false);
 
@@ -1455,6 +1575,7 @@ export default function App() {
         resetStudentForm();
       }
 
+      // Hapus dokumen siswa dari Firestore
       const CHUNK_SIZE = 400;
       for (let i = 0; i < idsToDelete.length; i += CHUNK_SIZE) {
         const chunk = idsToDelete.slice(i, i + CHUNK_SIZE);
@@ -1465,8 +1586,22 @@ export default function App() {
         await batch.commit();
       }
 
+      // Hapus transaksi yang terkait dengan siswa-siswa yang dihapus dari Firestore
+      const txSnap = await getDocs(
+        query(collection(db, 'transactions'), where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID))
+      );
+      const orphanTxDocs = txSnap.docs.filter((d: QueryDocumentSnapshot<DocumentData>) => deleteSet.has(d.data().studentId));
+      if (orphanTxDocs.length > 0) {
+        for (let i = 0; i < orphanTxDocs.length; i += CHUNK_SIZE) {
+          const chunk = orphanTxDocs.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          chunk.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(doc(db, 'transactions', d.id)));
+          await batch.commit();
+        }
+      }
+
       showToast(
-        `Berhasil menghapus ${count} data siswa yang ditandai ceklis!`,
+        `Berhasil menghapus ${count} data siswa beserta seluruh riwayat transaksinya!`,
         'success'
       );
     } catch (error) {
@@ -1475,6 +1610,68 @@ export default function App() {
         `Berhasil menghapus ${count} data siswa yang ditandai ceklis.`,
         'info'
       );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  // Bersihkan seluruh data sampel/lama dari Cloud Firestore & memori lokal (Reset Total)
+  const handleClearAllDatabaseData = async () => {
+    if (!currentUser || !isKasir) {
+      showToast('Hanya Kasir yang memiliki wewenang untuk membersihkan database.', 'error');
+      return;
+    }
+
+    setBusyAction('Membersihkan seluruh data sampel, siswa, dan transaksi dari Cloud Firestore...');
+    try {
+      // 1. Bersihkan transaksi dari Cloud Firestore
+      const txSnap = await getDocs(
+        query(collection(db, 'transactions'), where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID))
+      );
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < txSnap.docs.length; i += CHUNK_SIZE) {
+        const chunk = txSnap.docs.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(doc(db, 'transactions', d.id)));
+        await batch.commit();
+      }
+
+      // 2. Bersihkan siswa dari Cloud Firestore
+      const stSnap = await getDocs(
+        query(collection(db, 'students'), where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID))
+      );
+      for (let i = 0; i < stSnap.docs.length; i += CHUNK_SIZE) {
+        const chunk = stSnap.docs.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(doc(db, 'students', d.id)));
+        await batch.commit();
+      }
+
+      // 3. Reset state & cache lokal
+      setStudents([]);
+      setTransactions([]);
+      setSelectedStudentIds([]);
+      setCart([]);
+      setSelectedPosStudentId('');
+      setSelectedHistoryStudentId('');
+      resetStudentForm();
+
+      localStorage.removeItem('smks_pgri1_students_cache');
+      localStorage.removeItem('smks_pgri1_transactions_cache');
+      localStorage.setItem('smks_pgri1_tx_purged_v2', 'true');
+      localStorage.setItem('smks_pgri1_sample_students_purged', 'true');
+
+      setConfirmClearAllModalOpen(false);
+      showToast('Seluruh data sampel, transaksi, dan siswa berhasil dibersihkan dari database!', 'success');
+    } catch (err) {
+      console.error('Error clearing all database data:', err);
+      // Fallback lokal jika ada gangguan jaringan
+      setStudents([]);
+      setTransactions([]);
+      localStorage.removeItem('smks_pgri1_students_cache');
+      localStorage.removeItem('smks_pgri1_transactions_cache');
+      setConfirmClearAllModalOpen(false);
+      showToast('Seluruh data sampel dan transaksi lokal berhasil dibersihkan.', 'success');
     } finally {
       setBusyAction(null);
     }
@@ -5096,10 +5293,55 @@ export default function App() {
                 showToast('Backup Database (.csv) berhasil diunduh.', 'success');
               }}
               onOpenDocsModal={() => setDocsModalOpen(true)}
+              onClearAllSampleData={() => setConfirmClearAllModalOpen(true)}
             />
           )}
         </main>
       </div>
+
+      {/* Modal Konfirmasi Bersihkan Semua Data Sampel / Reset Database */}
+      {confirmClearAllModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-xl border border-red-200 bg-white p-6 shadow-xl dark:border-red-900/60 dark:bg-slate-900">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-950">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                  Bersihkan Seluruh Data Sampel?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Tindakan ini tidak dapat dibatalkan
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              Seluruh data siswa simulasi, riwayat transaksi, dan kalkulasi tagihan di Cloud Firestore dan perangkat ini akan dihapus hingga bersih (0 siswa &amp; 0 transaksi).
+            </p>
+            <p className="mt-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+              Pengaturan profil sekolah, kop surat, pejabat, dan akun staf tetap aman.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmClearAllModalOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleClearAllDatabaseData}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Ya, Bersihkan Semuanya</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Konfirmasi Hapus Massal Siswa yang Ditandai Ceklis */}
       {confirmBulkDeleteOpen && selectedStudentIds.length > 0 && (

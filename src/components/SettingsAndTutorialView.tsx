@@ -45,6 +45,7 @@ interface SettingsAndTutorialViewProps {
   onBackupJSON: () => void;
   onBackupCSV: () => void;
   onOpenDocsModal: () => void;
+  onClearAllSampleData?: () => void;
 }
 
 type SettingsTab =
@@ -67,6 +68,7 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
   onBackupJSON,
   onBackupCSV,
   onOpenDocsModal,
+  onClearAllSampleData,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('identitas_kop');
   const [formState, setFormState] = useState<SchoolSettings>(settings);
@@ -1339,6 +1341,30 @@ export const SettingsAndTutorialView: React.FC<SettingsAndTutorialViewProps> = (
                 <span>Skema &amp; Security Rules</span>
               </button>
             </div>
+
+            {isKasir && onClearAllSampleData && (
+              <div className="flex flex-col justify-between rounded-xl border border-red-200 bg-red-50/50 p-4 dark:border-red-900/60 dark:bg-red-950/20 sm:col-span-3">
+                <div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-red-700 dark:text-red-300">
+                    <Trash2 className="h-4 w-4 text-red-600" />
+                    <span>Pembersihan Total Data Sampel / Reset Database Riil</span>
+                  </div>
+                  <p className="mt-1.5 text-xs text-red-600/90 dark:text-red-400">
+                    Kosongkan seluruh data simulasi, riwayat transaksi, dan data siswa dari Cloud Firestore serta memori lokal agar aplikasi siap digunakan 100% murni untuk data sekolah yang baru.
+                  </p>
+                </div>
+                <div className="mt-4 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={onClearAllSampleData}
+                    className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span>Bersihkan Semua Data Sampel Sekarang</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
