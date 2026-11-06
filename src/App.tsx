@@ -212,8 +212,16 @@ export default function App() {
   }, [students]);
   const [transactions, setTransactions] = useState<Transaction[]>(() => {
     try {
+      const knownTestReceipts = new Set([
+        'KWT-202610-001',
+        'KWT-202610-002',
+        'KWT-202610-003',
+        'KWT-20261103-6878',
+        'KWT-20261103-6653',
+        'KWT-20261103-5368',
+        'KWT-20261105-2741',
+      ]);
       const sampleReceiptPrefixes = ['KWT-202610-', 'tx_seed_'];
-      const sampleReceipts = new Set(['KWT-202610-001', 'KWT-202610-002', 'KWT-202610-003']);
       const sampleStudentNis = new Set(['20261001', '20251102', '20241203', '20241204']);
       const cached = localStorage.getItem('smks_pgri1_transactions_cache');
       if (cached) {
@@ -221,15 +229,19 @@ export default function App() {
         return list.filter((t) => {
           const rNo = t.receiptNo || '';
           const sNis = t.studentNis || '';
+          const txDate = t.txDate || '';
           const isSample =
             t.id.startsWith('tx_seed_') ||
-            sampleReceipts.has(rNo) ||
+            knownTestReceipts.has(rNo) ||
             sampleReceiptPrefixes.some((p) => rNo.startsWith(p)) ||
             sampleStudentNis.has(sNis) ||
             t.studentId.startsWith('std_20261001_') ||
             t.studentId.startsWith('std_20251102_') ||
             t.studentId.startsWith('std_20241203_') ||
-            t.studentId.startsWith('std_20241204_');
+            t.studentId.startsWith('std_20241204_') ||
+            txDate === '2026-11-03' ||
+            txDate === '2026-11-04' ||
+            txDate === '2026-11-05';
           return !isSample;
         });
       }
@@ -304,6 +316,7 @@ export default function App() {
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [confirmBulkDeleteOpen, setConfirmBulkDeleteOpen] = useState<boolean>(false);
   const [confirmClearAllModalOpen, setConfirmClearAllModalOpen] = useState<boolean>(false);
+  const [confirmClearTransactionsOpen, setConfirmClearTransactionsOpen] = useState<boolean>(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [nisForm, setNisForm] = useState<string>('');
   const [nameForm, setNameForm] = useState<string>('');
@@ -699,27 +712,41 @@ export default function App() {
     const unsubTx = onSnapshot(
       txQuery,
       async (snapshot) => {
-        // Bersihkan seluruh transaksi sampel dan transaksi dummy yang pernah ada di Firestore & cache lokal
+        // Bersihkan seluruh transaksi sampel dan transaksi dummy uji coba yang pernah ada di Firestore & cache lokal
+        const knownTestReceipts = new Set([
+          'KWT-202610-001',
+          'KWT-202610-002',
+          'KWT-202610-003',
+          'KWT-20261103-6878',
+          'KWT-20261103-6653',
+          'KWT-20261103-5368',
+          'KWT-20261105-2741',
+        ]);
         const sampleReceiptPrefixes = ['KWT-202610-', 'tx_seed_'];
-        const sampleReceipts = new Set(['KWT-202610-001', 'KWT-202610-002', 'KWT-202610-003']);
         const sampleStudentNis = new Set(['20261001', '20251102', '20241203', '20241204']);
 
-        // Deteksi transaksi sampel berdasarkan ID, format kuitansi, atau NIS siswa sampel
-        const seedDocs = snapshot.docs.filter((d) => {
-          const rNo = String(d.data().receiptNo || '');
-          const sNis = String(d.data().studentNis || '');
-          const sId = String(d.data().studentId || '');
+        const isTestDoc = (docId: string, docData: DocumentData) => {
+          const rNo = String(docData.receiptNo || '');
+          const sNis = String(docData.studentNis || '');
+          const sId = String(docData.studentId || '');
+          const txDate = String(docData.txDate || '');
           return (
-            d.id.startsWith('tx_seed_') ||
-            sampleReceipts.has(rNo) ||
+            docId.startsWith('tx_seed_') ||
+            knownTestReceipts.has(rNo) ||
             sampleReceiptPrefixes.some((p) => rNo.startsWith(p)) ||
             sampleStudentNis.has(sNis) ||
             sId.startsWith('std_20261001_') ||
             sId.startsWith('std_20251102_') ||
             sId.startsWith('std_20241203_') ||
-            sId.startsWith('std_20241204_')
+            sId.startsWith('std_20241204_') ||
+            txDate === '2026-11-03' ||
+            txDate === '2026-11-04' ||
+            txDate === '2026-11-05'
           );
-        });
+        };
+
+        // Deteksi transaksi sampel/uji coba berdasarkan kuitansi atau tanggal simulasi
+        const seedDocs = snapshot.docs.filter((d) => isTestDoc(d.id, d.data()));
 
         if (seedDocs.length > 0) {
           try {
@@ -732,21 +759,7 @@ export default function App() {
         }
 
         const rawCloudTxs: Transaction[] = snapshot.docs
-          .filter((d) => {
-            const rNo = String(d.data().receiptNo || '');
-            const sNis = String(d.data().studentNis || '');
-            const sId = String(d.data().studentId || '');
-            const isSample =
-              d.id.startsWith('tx_seed_') ||
-              sampleReceipts.has(rNo) ||
-              sampleReceiptPrefixes.some((p) => rNo.startsWith(p)) ||
-              sampleStudentNis.has(sNis) ||
-              sId.startsWith('std_20261001_') ||
-              sId.startsWith('std_20251102_') ||
-              sId.startsWith('std_20241203_') ||
-              sId.startsWith('std_20241204_');
-            return !isSample;
-          })
+          .filter((d) => !isTestDoc(d.id, d.data()))
           .map((d) => {
             const data = d.data() as Omit<Transaction, 'id'>;
             const sppAmount = Math.max(0, Math.round(Number(data.sppAmount) || 0));
@@ -1672,6 +1685,43 @@ export default function App() {
       localStorage.removeItem('smks_pgri1_transactions_cache');
       setConfirmClearAllModalOpen(false);
       showToast('Seluruh data sampel dan transaksi lokal berhasil dibersihkan.', 'success');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  // Bersihkan seluruh riwayat transaksi kasir (Reset ke Rp 0 tanpa menghapus data 660 siswa)
+  const handleClearTransactionsOnly = async () => {
+    if (!currentUser || !isKasir) {
+      showToast('Hanya Kasir yang memiliki wewenang untuk mereset riwayat transaksi.', 'error');
+      return;
+    }
+
+    setBusyAction('Membersihkan seluruh riwayat transaksi kasir dari Cloud Firestore...');
+    try {
+      const txSnap = await getDocs(
+        query(collection(db, 'transactions'), where('createdBy', '==', SCHOOL_CLOUD_TENANT_ID))
+      );
+      const CHUNK_SIZE = 400;
+      for (let i = 0; i < txSnap.docs.length; i += CHUNK_SIZE) {
+        const chunk = txSnap.docs.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach((d: QueryDocumentSnapshot<DocumentData>) => batch.delete(doc(db, 'transactions', d.id)));
+        await batch.commit();
+      }
+
+      setTransactions([]);
+      saveTransactionsCache([]);
+      localStorage.removeItem('smks_pgri1_transactions_cache');
+      setConfirmClearTransactionsOpen(false);
+      showToast('Seluruh riwayat transaksi berhasil dibersihkan (Total Penerimaan Kas menjadi Rp 0). Data siswa tetap utuh.', 'success');
+    } catch (err) {
+      console.warn('Gagal membersihkan transaksi:', err);
+      setTransactions([]);
+      saveTransactionsCache([]);
+      localStorage.removeItem('smks_pgri1_transactions_cache');
+      setConfirmClearTransactionsOpen(false);
+      showToast('Riwayat transaksi lokal berhasil di-reset menjadi Rp 0.', 'info');
     } finally {
       setBusyAction(null);
     }
@@ -5165,9 +5215,22 @@ export default function App() {
               {/* Tabel Riwayat Transaksi & Tombol Void */}
               <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Daftar Riwayat Transaksi ({filteredHistoryTransactions.length})
-                  </h2>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <h2 className="font-display text-sm font-bold text-slate-900 dark:text-slate-100">
+                      Daftar Riwayat Transaksi ({filteredHistoryTransactions.length})
+                    </h2>
+                    {isKasir && transactions.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmClearTransactionsOpen(true)}
+                        className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-400"
+                        title="Kosongkan seluruh riwayat transaksi kasir ke Rp 0 tanpa menghapus data 660 siswa"
+                      >
+                        <Trash2 className="h-3 w-3 text-red-600" />
+                        <span>Reset Riwayat Transaksi (Rp 0)</span>
+                      </button>
+                    )}
+                  </div>
                   <div className="relative w-full sm:w-64">
                     <Search className="absolute top-2.5 left-3 h-3.5 w-3.5 text-slate-400" />
                     <input
@@ -5337,6 +5400,50 @@ export default function App() {
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 <span>Ya, Bersihkan Semuanya</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Konfirmasi Kosongkan Riwayat Transaksi Kasir (Reset Rp 0) */}
+      {confirmClearTransactionsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-xl border border-red-200 bg-white p-6 shadow-xl dark:border-red-900/60 dark:bg-slate-900">
+            <div className="flex items-center gap-3 text-red-600 dark:text-red-400">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-100 dark:bg-red-950">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+                  Kosongkan Riwayat Transaksi Kasir?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Reset penerimaan kas menjadi Rp 0
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              Seluruh riwayat pembayaran kasir dan kuitansi lama akan dihapus permanen dari Cloud Firestore. Total Penerimaan Kas di Dasbor akan kembali menjadi Rp 0.
+            </p>
+            <p className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              Data master {students.length} siswa tetap aman dan tidak akan terhapus.
+            </p>
+            <div className="mt-6 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmClearTransactionsOpen(false)}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={handleClearTransactionsOnly}
+                className="flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Ya, Reset Transaksi (Rp 0)</span>
               </button>
             </div>
           </div>

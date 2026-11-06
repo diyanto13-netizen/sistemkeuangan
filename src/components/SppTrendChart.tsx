@@ -60,13 +60,33 @@ export const SppTrendChart: React.FC<SppTrendChartProps> = ({
       days.push({ dateStr, label, totalSpp: daySpp });
     }
 
-    if (chartInstanceRef.current) {
-      chartInstanceRef.current.destroy();
-    }
-
     const textColor = darkMode ? '#94a3b8' : '#475569';
     const gridColor = darkMode ? 'rgba(148, 163, 184, 0.12)' : 'rgba(15, 23, 42, 0.08)';
     const palette = CHART_PALETTE[accentTheme] || CHART_PALETTE.emerald;
+    const bgBar = darkMode ? palette.darkBar : palette.bar;
+    const hoverBar = darkMode ? palette.darkHover : palette.hover;
+
+    if (chartInstanceRef.current) {
+      // Perbarui data tanpa animasi ulang agar grafik tidak bergerak-gerak
+      const chart = chartInstanceRef.current;
+      chart.data.labels = days.map((d) => d.label);
+      if (chart.data.datasets[0]) {
+        chart.data.datasets[0].data = days.map((d) => d.totalSpp);
+        chart.data.datasets[0].backgroundColor = bgBar;
+        chart.data.datasets[0].hoverBackgroundColor = hoverBar;
+      }
+      if (chart.options.scales?.x?.ticks) {
+        chart.options.scales.x.ticks.color = textColor;
+      }
+      if (chart.options.scales?.y?.ticks) {
+        chart.options.scales.y.ticks.color = textColor;
+      }
+      if (chart.options.scales?.y?.grid) {
+        chart.options.scales.y.grid.color = gridColor;
+      }
+      chart.update('none');
+      return;
+    }
 
     chartInstanceRef.current = new Chart(canvasRef.current, {
       type: 'bar',
@@ -76,8 +96,8 @@ export const SppTrendChart: React.FC<SppTrendChartProps> = ({
           {
             label: 'Penerimaan Pos SPP (Rp)',
             data: days.map((d) => d.totalSpp),
-            backgroundColor: darkMode ? palette.darkBar : palette.bar,
-            hoverBackgroundColor: darkMode ? palette.darkHover : palette.hover,
+            backgroundColor: bgBar,
+            hoverBackgroundColor: hoverBar,
             borderRadius: 6,
             maxBarThickness: 44,
           },
@@ -86,6 +106,7 @@ export const SppTrendChart: React.FC<SppTrendChartProps> = ({
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        animation: false, // Nonaktifkan animasi berulang agar indikator grafik stabil dan tidak bergerak sendiri
         plugins: {
           legend: {
             display: false,
@@ -125,13 +146,16 @@ export const SppTrendChart: React.FC<SppTrendChartProps> = ({
         },
       },
     });
+  }, [transactions, darkMode, accentTheme]);
 
+  useEffect(() => {
     return () => {
       if (chartInstanceRef.current) {
         chartInstanceRef.current.destroy();
+        chartInstanceRef.current = null;
       }
     };
-  }, [transactions, darkMode, accentTheme]);
+  }, []);
 
   return (
     <div className="relative h-64 w-full">
