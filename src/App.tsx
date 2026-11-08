@@ -163,8 +163,6 @@ export default function App() {
 
   // ID Institusi Sekolah Terpadu agar seluruh Browser (Chrome, Edge, HP, Laptop) & Peran (Kasir/Kepsek) tersinkronisasi ke Cloud Firestore yang sama
   const SCHOOL_CLOUD_TENANT_ID = 'staff_smks_pgri1_local';
-  const hasBackfilledStudentsRef = useRef<boolean>(false);
-  const hasBackfilledTxRef = useRef<boolean>(false);
 
   // Helper untuk menyimpan dan memuat cache lokal
   const saveStudentsCache = (list: Student[]) => {
@@ -626,76 +624,10 @@ export default function App() {
           });
         const cloudList = Array.from(uniqueByNis.values());
 
-        // Auto-Backfill dari localStorage HANYA jika Cloud Firestore benar-benar masih kosong (0 dokumen),
-        // sehingga siswa yang sudah dihapus di satu browser tidak pernah muncul kembali dari cache browser lain.
-        let mergedList = [...cloudList];
-        if (!hasBackfilledStudentsRef.current) {
-          hasBackfilledStudentsRef.current = true;
-          if (cloudList.length === 0) {
-            try {
-              const rawLocal = localStorage.getItem('smks_pgri1_students_cache');
-              const localStudents: Student[] = rawLocal ? JSON.parse(rawLocal) : [];
-              const seenLocalNis = new Set<string>();
-              const unsyncedLocal = localStudents.filter((ls) => {
-                if (!ls.nis) return false;
-                if (sampleStudentNis.has(ls.nis) || ls.id.startsWith('std_20261001_') || ls.id.startsWith('std_20251102_') || ls.id.startsWith('std_20241203_') || ls.id.startsWith('std_20241204_')) {
-                  return false;
-                }
-                const key = ls.nis.trim().toLowerCase();
-                if (seenLocalNis.has(key)) return false;
-                seenLocalNis.add(key);
-                return true;
-              });
-
-              if (unsyncedLocal.length > 0) {
-                mergedList = unsyncedLocal.map((st) => {
-                  const sppBalance = Math.max(0, Math.round(Number(st.sppBalance) || 0));
-                  const dspBalance = Math.max(0, Math.round(Number(st.dspBalance) || 0));
-                  const class11Balance = Math.max(0, Math.round(Number(st.class11Balance) || 0));
-                  const class12Balance = Math.max(0, Math.round(Number(st.class12Balance) || 0));
-                  return {
-                    ...st,
-                    sppBalance,
-                    dspBalance,
-                    class11Balance,
-                    class12Balance,
-                    totalBalance: sppBalance + dspBalance + class11Balance + class12Balance,
-                    paidMonths: Array.from(new Set(st.paidMonths || [])).slice(0, 60),
-                  };
-                });
-                const CHUNK_SIZE = 400;
-                for (let i = 0; i < mergedList.length; i += CHUNK_SIZE) {
-                  const chunk = mergedList.slice(i, i + CHUNK_SIZE);
-                  const batch = writeBatch(db);
-                  chunk.forEach((st) => {
-                    const stRef = doc(db, 'students', st.id);
-                    batch.set(stRef, {
-                      nis: st.nis,
-                      name: st.name,
-                      className: st.className,
-                      gradeLevel: st.gradeLevel,
-                      major: st.major,
-                      waNumber: st.waNumber,
-                      sppBalance: st.sppBalance,
-                      dspBalance: st.dspBalance,
-                      class11Balance: st.class11Balance,
-                      class12Balance: st.class12Balance,
-                      totalBalance:
-                        st.sppBalance + st.dspBalance + st.class11Balance + st.class12Balance,
-                      paidMonths: (st.paidMonths || []).slice(0, 60),
-                      createdBy: SCHOOL_CLOUD_TENANT_ID,
-                      createdAt: serverTimestamp(),
-                      updatedAt: serverTimestamp(),
-                    });
-                  });
-                  await batch.commit();
-                }
-              }
-            } catch (syncErr) {
-              console.warn('Auto-backfill local students to cloud warning:', syncErr);
-            }
-          }
-        }
+        // Cloud Firestore adalah satu-satunya sumber kebenaran (Single Source of Truth).
+        // Jika di Cloud Firestore sudah dihapus (0 siswa), perangkat/browser lain tidak boleh
+        // mengunggah ulang (auto-backfill) cache lokal lama mereka ke Cloud.
+        const mergedList = [...cloudList];
 
         mergedList.sort((a, b) => a.nis.localeCompare(b.nis));
         studentsRef.current = mergedList;
